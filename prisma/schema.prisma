@@ -1,0 +1,91 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Instrument {
+  id             String          @id @default(cuid())
+  symbol         String          @unique
+  name           String
+  kind           InstrumentKind
+  provider       String
+  providerSymbol String
+  active         Boolean         @default(true)
+  config         Json
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  bars           MarketBar[]
+  analyses       Analysis[]
+  alerts         Alert[]
+}
+
+model MarketBar {
+  id           String     @id @default(cuid())
+  instrumentId String
+  timestamp    DateTime
+  interval     String     @default("1d")
+  open         Float
+  high         Float
+  low          Float
+  close        Float
+  volume       Float?
+  source       String
+  instrument   Instrument @relation(fields: [instrumentId], references: [id], onDelete: Cascade)
+
+  @@unique([instrumentId, timestamp, interval])
+  @@index([instrumentId, timestamp])
+}
+
+model Analysis {
+  id           String     @id @default(cuid())
+  instrumentId String
+  timestamp    DateTime
+  regime       String
+  score        Float
+  confidence   Float
+  evidence     Json
+  signals      Json
+  instrument   Instrument @relation(fields: [instrumentId], references: [id], onDelete: Cascade)
+
+  @@unique([instrumentId, timestamp])
+  @@index([instrumentId, timestamp])
+}
+
+model Alert {
+  id           String        @id @default(cuid())
+  instrumentId String
+  timestamp    DateTime      @default(now())
+  severity     AlertSeverity
+  type         String
+  title        String
+  message      String
+  fromRegime   String?
+  toRegime     String
+  score        Float
+  confidence   Float
+  evidence     Json
+  dedupeKey    String        @unique
+  instrument   Instrument    @relation(fields: [instrumentId], references: [id], onDelete: Cascade)
+
+  @@index([instrumentId, timestamp])
+}
+
+enum InstrumentKind {
+  INDEX
+  ETF
+  EQUITY
+  RATE
+  COMMODITY
+  OTHER
+}
+
+enum AlertSeverity {
+  INFO
+  WATCH
+  WARNING
+  CRITICAL
+}

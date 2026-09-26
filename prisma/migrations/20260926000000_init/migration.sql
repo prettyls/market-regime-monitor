@@ -1,0 +1,13 @@
+CREATE TYPE "InstrumentKind" AS ENUM ('INDEX', 'ETF', 'EQUITY', 'RATE', 'COMMODITY', 'OTHER');
+CREATE TYPE "AlertSeverity" AS ENUM ('INFO', 'WATCH', 'WARNING', 'CRITICAL');
+CREATE TABLE "Instrument" ("id" TEXT PRIMARY KEY, "symbol" TEXT NOT NULL, "name" TEXT NOT NULL, "kind" "InstrumentKind" NOT NULL, "provider" TEXT NOT NULL, "providerSymbol" TEXT NOT NULL, "active" BOOLEAN NOT NULL DEFAULT true, "config" JSONB NOT NULL, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" TIMESTAMP(3) NOT NULL);
+CREATE UNIQUE INDEX "Instrument_symbol_key" ON "Instrument"("symbol");
+CREATE TABLE "MarketBar" ("id" TEXT PRIMARY KEY, "instrumentId" TEXT NOT NULL REFERENCES "Instrument"("id") ON DELETE CASCADE, "timestamp" TIMESTAMP(3) NOT NULL, "interval" TEXT NOT NULL DEFAULT '1d', "open" DOUBLE PRECISION NOT NULL, "high" DOUBLE PRECISION NOT NULL, "low" DOUBLE PRECISION NOT NULL, "close" DOUBLE PRECISION NOT NULL, "volume" DOUBLE PRECISION, "source" TEXT NOT NULL);
+CREATE UNIQUE INDEX "MarketBar_instrumentId_timestamp_interval_key" ON "MarketBar"("instrumentId", "timestamp", "interval");
+CREATE INDEX "MarketBar_instrumentId_timestamp_idx" ON "MarketBar"("instrumentId", "timestamp");
+CREATE TABLE "Analysis" ("id" TEXT PRIMARY KEY, "instrumentId" TEXT NOT NULL REFERENCES "Instrument"("id") ON DELETE CASCADE, "timestamp" TIMESTAMP(3) NOT NULL, "regime" TEXT NOT NULL, "score" DOUBLE PRECISION NOT NULL, "confidence" DOUBLE PRECISION NOT NULL, "evidence" JSONB NOT NULL, "signals" JSONB NOT NULL);
+CREATE UNIQUE INDEX "Analysis_instrumentId_timestamp_key" ON "Analysis"("instrumentId", "timestamp");
+CREATE INDEX "Analysis_instrumentId_timestamp_idx" ON "Analysis"("instrumentId", "timestamp");
+CREATE TABLE "Alert" ("id" TEXT PRIMARY KEY, "instrumentId" TEXT NOT NULL REFERENCES "Instrument"("id") ON DELETE CASCADE, "timestamp" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "severity" "AlertSeverity" NOT NULL, "type" TEXT NOT NULL, "title" TEXT NOT NULL, "message" TEXT NOT NULL, "fromRegime" TEXT, "toRegime" TEXT NOT NULL, "score" DOUBLE PRECISION NOT NULL, "confidence" DOUBLE PRECISION NOT NULL, "evidence" JSONB NOT NULL, "dedupeKey" TEXT NOT NULL);
+CREATE UNIQUE INDEX "Alert_dedupeKey_key" ON "Alert"("dedupeKey");
+CREATE INDEX "Alert_instrumentId_timestamp_idx" ON "Alert"("instrumentId", "timestamp");
