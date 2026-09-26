@@ -12,12 +12,19 @@ export class MarketService {
 
   async importHistory(symbol: string, from?: Date, to?: Date): Promise<number> {
     const instrument = await this.requireInstrument(symbol);
-    const provider = this.providers.get(instrument.provider);
-    const bars = await provider.fetchHistory({ symbol: instrument.providerSymbol, interval: "1d", ...(from ? { from } : {}), ...(to ? { to } : {}) });
+    const { provider, providerSymbol } = this.resolveHistorySource(instrument.symbol, instrument.provider, instrument.providerSymbol);
+    const bars = await provider.fetchHistory({ symbol: providerSymbol, interval: "1d", ...(from ? { from } : {}), ...(to ? { to } : {}) });
     if (bars.length === 0) return 0;
     await this.db.$transaction(bars.map((bar) => this.db.marketBar.upsert({ where: { instrumentId_timestamp_interval: { instrumentId: instrument.id, timestamp: bar.timestamp, interval: "1d" } }, create: { instrumentId: instrument.id, interval: "1d", source: provider.name, ...bar }, update: { source: provider.name, ...bar } })));
     this.logger.info({ symbol, count: bars.length, provider: provider.name }, "historical bars imported");
     return bars.length;
+  }
+
+  private resolveHistorySource(symbol: string, providerName: string, providerSymbol: string) {
+    if (symbol.toUpperCase() === "VIX" && providerName === "stooq" && providerSymbol.toUpperCase() === "^VIX") {
+      return { provider: this.providers.get("cboe"), providerSymbol: "VIX" };
+    }
+    return { provider: this.providers.get(providerName), providerSymbol };
   }
 
   async analyze(symbol: string): Promise<AnalysisResult> {

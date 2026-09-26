@@ -11,4 +11,4 @@ export const defaultPatternConfig: PatternConfig = {
   trend: { fastPeriod: 10, slowPeriod: 30, slopePeriod: 10 }
 };
 
-export const vixDefinition: InstrumentDefinition = { symbol: "VIX", name: "CBOE Volatility Index", kind: "INDEX", provider: "stooq", providerSymbol: "^VIX", config: defaultPatternConfig };
+export const vixDefinition: InstrumentDefinition = { symbol: "VIX", name: "CBOE Volatility Index", kind: "INDEX", provider: "cboe", providerSymbol: "VIX", config: defaultPatternConfig };
