@@ -22,12 +22,37 @@ npm install
 npm run db:generate
 npm run db:deploy
 npm run cli -- seed
-npm run cli -- import VIX --from 2020-01-01
-npm run cli -- analyze VIX
-npm run dev
+npm run collect -- --symbol VIX --from 2020-01-01
+npm run build
+npm run start:api
 ```
 
 The API listens on `http://localhost:3000`. Verify it with `GET /health`.
+
+## Execution modes
+
+| Mode | Command | Behavior |
+|---|---|---|
+| API | `npm run start:api` | Start the HTTP server from the compiled build; run `npm run build` first. |
+| Collector | `npm run collect` | Import daily history and analyze each active instrument, then exit. |
+| Backtest | `npm run backtest` | Evaluate stored history for each active instrument, print results, then exit. |
+| CLI | `npm run cli -- --help` | Show commands for instrument management, imports, analysis, and data inspection. |
+
+All modes use the same database and instrument configuration. `npm start` is an alias for `start:api`; `npm run dev` starts the API with automatic reload. Collector, Backtest, and CLI run TypeScript directly and require development dependencies (`npm install`).
+
+```bash
+npm run collect
+npm run collect -- --symbol VIX --from 2020-01-01 --to 2024-12-31
+npm run backtest
+npm run backtest -- --symbol VIX
+npm run cli -- data --symbol VIX
+```
+
+Collector and Backtest default to all instruments marked `active`. `--symbol` selects one instrument explicitly, including an inactive instrument. Symbols are case-insensitive. Both jobs continue processing other instruments after a failure and exit with a nonzero status if any instrument fails. Neither job starts the API server.
+
+Collector accepts optional inclusive `--from` and `--to` dates in `YYYY-MM-DD` format. Without dates it requests all history available from each configured provider; imports upsert existing daily bars. After a nonempty import it saves analysis of the newest 1,000 stored bars and creates any regime-transition alert. The date options limit the import, not the analysis window. A zero-row import skips analysis. Collection runs once; use an external scheduler for recurring runs. Provider access errors (including Stooq HTTP 403) still require resolving access or configuring another provider.
+
+Backtest reads stored bars without importing data or saving analyses or alerts. Import history first; results report observations and average next-bar returns by regime.
 
 ## CLI
 
@@ -79,6 +104,17 @@ Example instrument body:
 ```
 
 Provider coverage varies by symbol. A zero-row import can mean the provider does not carry that series; add another permitted provider by implementing `MarketDataProvider` and registering it in `ProviderRegistry`.
+
+## Docker and Cloud Run
+
+Run PostgreSQL, migrations, and the containerized API locally:
+
+```bash
+docker compose -f docker-compose.yml -f compose.app.yml up --build -d
+curl --fail http://localhost:8080/health
+```
+
+The production image supports all four modes. Cloud Run uses an API service plus separate Collector and Backtest jobs, with a migration job applied before deployment. See [Docker and Cloud Run deployment](docs/cloud-run.md) for image commands, Cloud SQL and Secret Manager setup, and the deployment script. The API requires authenticated Cloud Run access by default.
 
 ## Development
 

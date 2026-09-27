@@ -6,7 +6,10 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsx watch src/server.ts",
-    "start": "node dist/server.js",
+    "start": "npm run start:api",
+    "start:api": "node dist/src/server.js",
+    "collect": "tsx src/collect.ts",
+    "backtest": "tsx src/backtest.ts",
     "cli": "tsx src/cli.ts",
     "test": "vitest run",
     "test:watch": "vitest",
