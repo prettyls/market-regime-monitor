@@ -35,12 +35,16 @@ The API listens on `http://localhost:3000`. Verify it with `GET /health`.
 npm run cli -- instruments
 npm run cli -- instrument:add --symbol SPX --name "S&P 500" --provider-symbol ^SPX
 npm run cli -- import SPX --from 2020-01-01
+npm run cli -- data --symbol VIX
+npm run cli -- data --symbol VIX --from 2024-01-01 --to 2024-12-31
 npm run cli -- analyze SPX
 npm run cli -- alerts --symbol SPX
 npm run cli -- backtest SPX
 ```
 
 `instrument:add` applies the default configuration. For custom thresholds, create an instrument through the API or edit its JSON configuration through your own administration layer.
+
+`data` displays imported daily OHLC prices and volume in chronological order. `--symbol` is required and case-insensitive. Both `--from` and `--to` are optional inclusive UTC dates in `YYYY-MM-DD` format; omit either to leave that end of the range unbounded. With neither date, all stored daily bars for the symbol are shown. This command reads the database without fetching new data.
 
 ## REST API
 

@@ -12,17 +12,35 @@ export class MarketService {
 
   async importHistory(symbol: string, from?: Date, to?: Date): Promise<number> {
     const instrument = await this.requireInstrument(symbol);
-    const provider = this.providers.get(instrument.provider);
-    const bars = await provider.fetchHistory({ symbol: instrument.providerSymbol, interval: "1d", ...(from ? { from } : {}), ...(to ? { to } : {}) });
+    const { provider, providerSymbol } = this.resolveHistorySource(instrument.symbol, instrument.provider, instrument.providerSymbol);
+    const bars = await provider.fetchHistory({ symbol: providerSymbol, interval: "1d", ...(from ? { from } : {}), ...(to ? { to } : {}) });
     if (bars.length === 0) return 0;
     await this.db.$transaction(bars.map((bar) => this.db.marketBar.upsert({ where: { instrumentId_timestamp_interval: { instrumentId: instrument.id, timestamp: bar.timestamp, interval: "1d" } }, create: { instrumentId: instrument.id, interval: "1d", source: provider.name, ...bar }, update: { source: provider.name, ...bar } })));
     this.logger.info({ symbol, count: bars.length, provider: provider.name }, "historical bars imported");
     return bars.length;
   }
 
+  private resolveHistorySource(symbol: string, providerName: string, providerSymbol: string) {
+    if (symbol.toUpperCase() === "VIX" && providerName === "stooq" && providerSymbol.toUpperCase() === "^VIX") {
+      return { provider: this.providers.get("cboe"), providerSymbol: "VIX" };
+    }
+    return { provider: this.providers.get(providerName), providerSymbol };
+  }
+
+  async getHistory(symbol: string, from?: Date, to?: Date) {
+    const instrument = await this.requireInstrument(symbol);
+    return this.db.marketBar.findMany({
+      where: { instrumentId: instrument.id, interval: "1d", timestamp: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } },
+      orderBy: { timestamp: "asc" },
+      select: { timestamp: true, open: true, high: true, low: true, close: true, volume: true }
+    });
+  }
+
   async analyze(symbol: string): Promise<AnalysisResult> {
     const instrument = await this.requireInstrument(symbol);
-    const rows = await this.db.marketBar.findMany({ where: { instrumentId: instrument.id, interval: "1d" }, orderBy: { timestamp: "asc" }, take: 1000 });
+    const rows = await this.db.marketBar.findMany({ where: { instrumentId: instrument.id, interval: "1d" }, orderBy: { timestamp: "desc" }, take: 1000 });
+    // Select the newest window, then restore the chronological order detectors expect.
+    rows.reverse();
     const bars: Bar[] = rows.map((row) => ({ timestamp: row.timestamp, open: row.open, high: row.high, low: row.low, close: row.close, ...(row.volume === null ? {} : { volume: row.volume }) }));
     const result = this.strategy.analyze(bars, instrument.config as unknown as PatternConfig);
     const previous = await this.db.analysis.findFirst({ where: { instrumentId: instrument.id }, orderBy: { timestamp: "desc" } });
