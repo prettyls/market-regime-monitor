@@ -28,10 +28,13 @@ export class StooqProvider implements MarketDataProvider {
     if (request.from) params.set("d1", yyyymmdd(request.from));
     if (request.to) params.set("d2", yyyymmdd(request.to));
     const response = await this.fetchCsv(params);
-    if (!response.ok) throw new Error(`Stooq returned HTTP ${response.status}`);
+    if (!response.ok) throw new Error(`Stooq returned HTTP ${response.status} for ${request.symbol}; access may be blocked by provider verification. Try again later.`);
     const text = await response.text();
     if (text.trim().startsWith("No data")) return [];
     const lines = text.trim().split(/\r?\n/);
+    if (!/^Date,Open,High,Low,Close(?:,Volume)?$/.test(lines[0] ?? "")) {
+      throw new Error(`Stooq returned an unexpected response for ${request.symbol} instead of historical CSV data`);
+    }
     const bars: Bar[] = [];
     for (const line of lines.slice(1)) {
       const [date, open, high, low, close, volume] = line.split(",");
@@ -46,37 +49,46 @@ export class StooqProvider implements MarketDataProvider {
   private async fetchCsv(params: URLSearchParams): Promise<Response> {
     const url = `${baseUrl}/q/d/l/?${params.toString()}`;
     const response = await this.fetcher(url, { headers: this.requestHeaders() });
-    if (response.ok) return response;
-
-    const challengePage = await response.text();
+    const challengePage = await response.clone().text();
     if (!this.isVerificationPage(challengePage)) {
-      return new Response(challengePage, { status: response.status, statusText: response.statusText, headers: response.headers });
+      return response;
     }
 
-    const cookie = response.headers.get("set-cookie") ?? undefined;
+    const cookies = new Map<string, string>();
+    const updateCookies = (headers: Headers) => {
+      for (const cookie of headers.getSetCookie()) {
+        const pair = cookie.split(";", 1)[0]!;
+        const separator = pair.indexOf("=");
+        if (separator > 0) cookies.set(pair.slice(0, separator).trim(), pair.slice(separator + 1));
+      }
+    };
+    const cookieHeader = () => [...cookies].map(([name, value]) => `${name}=${value}`).join("; ") || undefined;
+    updateCookies(response.headers);
     const match = challengePage.match(verificationPattern);
     if (!match) {
-      return new Response(challengePage, { status: response.status, statusText: response.statusText, headers: response.headers });
+      return response;
     }
 
     const challenge = match[1];
     const difficultyText = match[2];
     if (!challenge || !difficultyText) {
-      return new Response(challengePage, { status: response.status, statusText: response.statusText, headers: response.headers });
+      return response;
     }
-    const nonce = await solveVerificationNonce(challenge, Number(difficultyText));
+    const difficulty = Number(difficultyText);
+    if (difficulty > 4) throw new Error("Stooq verification difficulty exceeds the supported limit");
+    const nonce = await solveVerificationNonce(challenge, difficulty);
     const verifyResponse = await this.fetcher(`${baseUrl}/__verify`, {
       method: "POST",
       headers: {
-        ...this.requestHeaders(cookie),
+        ...this.requestHeaders(cookieHeader()),
         "content-type": "application/x-www-form-urlencoded",
       },
       body: new URLSearchParams({ c: challenge, n: String(nonce) }),
     });
     if (!verifyResponse.ok) return verifyResponse;
 
-    const verifiedCookie = [cookie, verifyResponse.headers.get("set-cookie")].filter(Boolean).join("; ");
-    return this.fetcher(url, { headers: this.requestHeaders(verifiedCookie || undefined) });
+    updateCookies(verifyResponse.headers);
+    return this.fetcher(url, { headers: this.requestHeaders(cookieHeader()) });
   }
 
   private isVerificationPage(body: string): boolean {
