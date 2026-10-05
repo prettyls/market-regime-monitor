@@ -1,14 +1,10 @@
 import { Command } from "commander";
-import pino from "pino";
 import { defaultPatternConfig, vixDefinition } from "./config.js";
 import { prisma } from "./db.js";
-import { ProviderRegistry } from "./providers/index.js";
 import { instrumentInputSchema } from "./schemas.js";
-import { MarketService } from "./services.js";
+import { runCommand, service } from "./command-runtime.js";
 import { createDataCommand } from "./data-command.js";
 
-const logger = pino({ level: process.env.LOG_LEVEL ?? "info", transport: { target: "pino-pretty" } });
-const service = new MarketService(prisma, new ProviderRegistry(), logger);
 const program = new Command().name("regime").description("Market regime monitor CLI").version("0.1.0");
 program.addCommand(createDataCommand(service));
 program.command("seed").description("Add the default VIX instrument").action(async () => console.log(await service.addInstrument(vixDefinition)));
@@ -19,14 +15,4 @@ program.command("analyze").argument("<symbol>").action(async (symbol) => console
 program.command("backtest").argument("<symbol>").action(async (symbol) => console.table((await service.backtest(symbol)).byRegime));
 program.command("alerts").option("--symbol <symbol>").option("--limit <number>", "maximum rows", "50").action(async (options) => console.table(await prisma.alert.findMany({ where: options.symbol ? { instrument: { symbol: options.symbol.toUpperCase() } } : {}, orderBy: { timestamp: "desc" }, take: Number(options.limit), select: { timestamp: true, severity: true, title: true, score: true, confidence: true } })));
 
-// Some package runners forward their option separator to the script.
-const args = process.argv.slice(2);
-if (args[0] === "--") args.shift();
-try {
-  await program.parseAsync(args, { from: "user" });
-} catch (error) {
-  console.error(`error: ${error instanceof Error ? error.message : String(error)}`);
-  process.exitCode = 1;
-} finally {
-  await prisma.$disconnect();
-}
+await runCommand(program);
