@@ -1,19 +1,24 @@
 # Market Regime Monitor
 
-An API-first TypeScript service for importing delayed/public market data, detecting configurable patterns, classifying market regimes, and emitting transition alerts. VIX is included as configuration—not embedded in the analysis logic—and any instrument supported by a provider can use the same engine.
+An API-first TypeScript service for importing market data through REST APIs, detecting configurable patterns, classifying market regimes, and emitting transition alerts. VIX is included as configuration—not embedded in the analysis logic—and any instrument supported by a proposition can use the same engine.
 
 ## Architecture
 
 - **Instrument** describes the market series, provider symbol, and per-instrument pattern settings.
 - **Pattern detectors** are pure calculations: dynamic percentile range, confirmed breakout, z-score mean reversion, and moving-average/slope trend.
 - **Strategy** combines detector output into a regime, score, confidence, and traceable evidence.
-- **Provider** isolates licensed/public data access. V1 includes Stooq's public historical CSV endpoint; no site scraping is used.
+- **REST request factory** builds GET/POST/PUT requests from path, request type, and optional body.
+- **Data-collection proposition** isolates broker/data-source integrations. Each proposition has its own API base URL. V1 includes Charles Schwab.
 - **Persistence and delivery** use PostgreSQL/Prisma, Fastify REST endpoints, a Commander CLI, and Pino logs.
 - **Alerts** are generated only when the persisted regime changes. A unique transition key makes repeated analysis idempotent.
 
 ## Quick start
 
 Requirements: Node.js 22+, npm, and Docker.
+
+Environment:
+- `DATA_PROVIDER` selects the collection proposition (for now use `schawb`).
+- API base URLs are resolved internally from proposition mappings.
 
 ```bash
 cp .env.example .env
@@ -50,7 +55,7 @@ npm run cli -- data --symbol VIX
 
 Collector and Backtest default to all instruments marked `active`. `--symbol` selects one instrument explicitly, including an inactive instrument. Symbols are case-insensitive. Both jobs continue processing other instruments after a failure and exit with a nonzero status if any instrument fails. Neither job starts the API server.
 
-Collector accepts optional inclusive `--from` and `--to` dates in `YYYY-MM-DD` format. Without dates it requests all history available from each configured provider; imports upsert existing daily bars. After a nonempty import it saves analysis of the newest 1,000 stored bars and creates any regime-transition alert. The date options limit the import, not the analysis window. A zero-row import skips analysis. Collection runs once; use an external scheduler for recurring runs. Provider access errors (including Stooq HTTP 403) still require resolving access or configuring another provider.
+Collector accepts optional inclusive `--from` and `--to` dates in `YYYY-MM-DD` format. Without dates it requests all history available from each configured proposition; imports upsert existing daily bars. After a nonempty import it saves analysis of the newest 1,000 stored bars and creates any regime-transition alert. The date options limit the import, not the analysis window. A zero-row import skips analysis. Collection runs once; use an external scheduler for recurring runs. Proposition access errors require resolving endpoint/credentials or adding another proposition.
 
 Backtest reads stored bars without importing data or saving analyses or alerts. Import history first; results report observations and average next-bar returns by regime.
 
@@ -92,8 +97,8 @@ Example instrument body:
   "symbol": "MOVE",
   "name": "ICE BofA MOVE Index",
   "kind": "INDEX",
-  "provider": "stooq",
-  "providerSymbol": "^MOVE",
+  "provider": "charles_schwab",
+  "providerSymbol": "$MOVE",
   "config": {
     "range": { "lookback": 60, "percentileLow": 0.2, "percentileHigh": 0.8 },
     "breakout": { "lookback": 20, "confirmationBars": 2, "bufferPct": 0.005 },
@@ -103,7 +108,7 @@ Example instrument body:
 }
 ```
 
-Provider coverage varies by symbol. A zero-row import can mean the provider does not carry that series; add another permitted provider by implementing `MarketDataProvider` and registering it in `ProviderRegistry`.
+Proposition coverage varies by symbol. A zero-row import can mean the configured proposition does not carry that series; add another proposition by implementing `MarketDataProvider` and registering it in `ProviderRegistry`.
 
 ## Docker and Cloud Run
 

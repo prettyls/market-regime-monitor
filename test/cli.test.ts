@@ -38,7 +38,7 @@ it.each([false, true])("parses instrument:add with a forwarded separator: %s", a
   await import("../src/cli.js");
 
   expect(addInstrument).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
-    symbol: "SPX", name: "S&P 500", providerSymbol: "^SPX", kind: "INDEX", provider: "stooq"
+    symbol: "SPX", name: "S&P 500", providerSymbol: "^SPX", kind: "INDEX", provider: "charles_schwab"
   }));
   expect(disconnect).toHaveBeenCalledOnce();
 });
