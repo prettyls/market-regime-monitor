@@ -27,39 +27,41 @@ The default command starts the API; override it with `node dist/src/collect.js`,
 
 ## Cloud resources
 
-Use a Google Cloud project with billing enabled, the Google Cloud CLI installed and authenticated, and a PostgreSQL Cloud SQL instance in the deployment region. The deployment script assumes these prerequisites exist; it does not create the database instance or its users.
+Use a Google Cloud project with billing enabled, the Google Cloud CLI installed and authenticated, and an AlloyDB PostgreSQL instance reachable from Cloud Run over private networking. The deployment script assumes these prerequisites exist; it does not create the database instance or its users.
 
 Set your own values:
 
 ```bash
 export PROJECT_ID="your-project-id"
 export REGION="us-central1"
-export INSTANCE_CONNECTION_NAME="your-project-id:us-central1:your-postgres-instance"
 export SERVICE_ACCOUNT="market-regime-monitor@${PROJECT_ID}.iam.gserviceaccount.com"
 export DATABASE_SECRET="market-regime-database-url"
 export SECRET_VERSION="1"
+export VPC_CONNECTOR="projects/${PROJECT_ID}/locations/${REGION}/connectors/your-vpc-connector"
+export VPC_EGRESS="private-ranges-only"
 
-gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com sqladmin.googleapis.com secretmanager.googleapis.com --project="$PROJECT_ID"
+gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com secretmanager.googleapis.com --project="$PROJECT_ID"
 gcloud artifacts repositories create market-regime-monitor --repository-format=docker --location="$REGION" --project="$PROJECT_ID"
 gcloud iam service-accounts create market-regime-monitor --project="$PROJECT_ID"
-gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="serviceAccount:$SERVICE_ACCOUNT" --role=roles/cloudsql.client
 ```
 
-Skip create commands for resources you already have. Create the `regime` database and a password-authenticated database user using the Cloud SQL console. This setup uses the Cloud SQL attachment and Unix socket with a public-IP-enabled instance; no authorized-network entry is needed for the managed connector. A private-IP-only instance instead requires VPC connectivity configuration, which this script does not configure.
+Skip create commands for resources you already have. Create the application database and a password-authenticated database user in AlloyDB. Ensure Cloud Run can route to the AlloyDB private IP (same VPC or VPC connector path), because this deployment uses a standard PostgreSQL TCP URL.
 
 Create a Secret Manager secret named `market-regime-database-url` in the console. Put the complete connection URL in its value:
 
 ```text
-postgresql://DB_USER:URL_ENCODED_PASSWORD@localhost/regime?host=/cloudsql/PROJECT_ID:REGION:INSTANCE&schema=public&connection_limit=5&pool_timeout=20
+postgresql://DB_USER:DB_PASSWORD@ALLOYDB_PRIVATE_IP:5432/postgres?schema=public&sslmode=require
 ```
 
-Replace the placeholders, URL-encode special characters in credentials, and set `SECRET_VERSION` to the created numeric version. Do not commit this value or bake it into the image. Allow the runtime identity to read this secret:
+Replace the placeholders, URL-encode special characters in credentials, and set `SECRET_VERSION` to the created numeric version. Do not commit this value or bake it into the image. If the password is stored separately in Secret Manager, compose the final URL at deployment time and inject it as `DATABASE_URL`. Allow the runtime identity to read this secret:
 
 ```bash
 gcloud secrets add-iam-policy-binding "$DATABASE_SECRET" --project="$PROJECT_ID" --member="serviceAccount:$SERVICE_ACCOUNT" --role=roles/secretmanager.secretAccessor
 ```
 
 The deploying identity needs Cloud Build submission, Cloud Run administration, and permission to act as the runtime service account. The project's Cloud Build identity needs Artifact Registry Writer on the repository, access to the build source bucket, and permission to write build logs. Check your project's actual build identity rather than assuming a legacy default service account. Database migrations use the same database credentials here, so that user must own the application schema and be allowed to create/alter its tables.
+
+`VPC_CONNECTOR` is required by [deploy-cloud-run.sh](/Users/ranliu/git/market-regime-monitor/scripts/deploy-cloud-run.sh), and `VPC_EGRESS` is optional (defaults to `private-ranges-only`).
 
 ## Build and deploy
 
@@ -84,7 +86,7 @@ gcloud run jobs execute market-regime-monitor-collect --project="$PROJECT_ID" --
 gcloud run jobs execute market-regime-monitor-backtest --project="$PROJECT_ID" --region="$REGION" --wait
 ```
 
-Jobs use one task and no automatic retries. Do not overlap collector executions. Collection uses all active configured instruments and can still fail if a data provider denies access; deploying to Cloud Run does not fix Stooq availability. For periodic collection, configure Cloud Scheduler to execute the Collector job with a service account granted Cloud Run Invoker on that job. Choose a schedule and timezone before enabling it.
+Jobs use one task and no automatic retries. Do not overlap collector executions. Collection uses all active configured instruments and can still fail if a data provider denies access. For periodic collection, configure Cloud Scheduler to execute the Collector job with a service account granted Cloud Run Invoker on that job. Choose a schedule and timezone before enabling it.
 
 ## API access and operations
 
@@ -99,13 +101,13 @@ curl --fail http://localhost:8081/api/v1/instruments
 
 `/health` is a process liveness check, not a database readiness check. Confirm database access with `/api/v1/instruments` and inspect job execution logs. Runtime logs are JSON in Cloud Logging. The server honors Cloud Run's `PORT` and closes HTTP/database connections on SIGTERM.
 
-The API is capped at three instances with concurrency 20. With `connection_limit=5`, budget database connections for those instances, old revisions during rollout, and concurrently running jobs. Increase CPU/memory/timeouts for larger backtests after measuring workload. Run imports and backtests as jobs for long workloads rather than relying on HTTP request lifetimes. Cloud SQL storage is persistent; container filesystems are not the data store. Enable database backups before production use.
+The API is capped at three instances with concurrency 20. With `connection_limit=5`, budget database connections for those instances, old revisions during rollout, and concurrently running jobs. Increase CPU/memory/timeouts for larger backtests after measuring workload. Run imports and backtests as jobs for long workloads rather than relying on HTTP request lifetimes. AlloyDB storage is persistent; container filesystems are not the data store. Enable database backups before production use.
 
 To roll back application code, send traffic to the previous Cloud Run revision and redeploy job images from the previous release tag. This does not undo database migrations.
 
 ## References
 
 - [Cloud Run container contract](https://docs.cloud.google.com/run/docs/container-contract)
-- [Cloud SQL PostgreSQL connections from Cloud Run](https://docs.cloud.google.com/sql/docs/postgres/connect-run)
+- [AlloyDB connectivity options](https://cloud.google.com/alloydb/docs/connectivity-overview)
 - [Secret Manager configuration](https://docs.cloud.google.com/run/docs/configuring/services/secrets)
 - [Cloud Run job deployment flags](https://docs.cloud.google.com/sdk/gcloud/reference/run/jobs/deploy)
