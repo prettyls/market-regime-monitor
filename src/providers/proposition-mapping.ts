@@ -1,8 +1,8 @@
-export type PropositionName = "schawb";
+export type PropositionName = "schawb" | "stooq";
 
 export type PropositionConfig = Readonly<{
   proposition: PropositionName;
-  providerName: "charles_schwab";
+  providerName: "charles_schwab" | "stooq";
   apiUrl: string;
 }>;
 
@@ -12,12 +12,19 @@ const propositionConfigs: Record<PropositionName, PropositionConfig> = {
     providerName: "charles_schwab",
     apiUrl: "https://api.schwabapi.com",
   },
+  stooq: {
+    proposition: "stooq",
+    providerName: "stooq",
+    apiUrl: "https://stooq.com",
+  },
 };
 
 const propositionAliases = new Map<string, PropositionName>([
   ["schawb", "schawb"],
   ["schwab", "schawb"],
   ["charles_schwab", "schawb"],
+  ["stooq", "stooq"],
+  ["stooq.com", "stooq"],
 ]);
 
 export class PropositionMapping {

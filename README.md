@@ -7,18 +7,59 @@ An API-first TypeScript service for importing market data through REST APIs, det
 - **Instrument** describes the market series, provider symbol, and per-instrument pattern settings.
 - **Pattern detectors** are pure calculations: dynamic percentile range, confirmed breakout, z-score mean reversion, and moving-average/slope trend.
 - **Strategy** combines detector output into a regime, score, confidence, and traceable evidence.
-- **REST request factory** builds GET/POST/PUT requests from path, request type, and optional body.
-- **Data-collection proposition** isolates broker/data-source integrations. Each proposition has its own API base URL. V1 includes Charles Schwab.
+- **Schwab API client** uses `@sudowealth/schwab-api` for typed Schwab market-data access.
+- **Data-collection proposition** isolates broker/data-source integrations. Each proposition has its own API base URL. V1 includes Charles Schwab and Stooq.
 - **Persistence and delivery** use PostgreSQL/Prisma, Fastify REST endpoints, a Commander CLI, and Pino logs.
 - **Alerts** are generated only when the persisted regime changes. A unique transition key makes repeated analysis idempotent.
 
 ## Quick start
 
 Requirements: Node.js 22+, npm, and Docker.
+Environment variables are loaded automatically from `.env` at startup.
 
 Environment:
-- `DATA_PROVIDER` selects the collection proposition (for now use `schawb`).
+- `DATA_PROVIDER` selects the collection proposition (`schawb` is the default; `stooq` is also supported).
+- `SCHWAB_ACCESS_TOKEN` is required when the configured provider is Schwab.
+- Optional automatic refresh variables:
+  - `SCHWAB_REFRESH_TOKEN`
+  - `CLIENT_ID`/`CLIENT_SECRET` (or `SCHWAB_CLIENT_ID`/`SCHWAB_CLIENT_SECRET`)
+  - `SCHWAB_ACCESS_TOKEN_EXPIRES_AT` (epoch milliseconds, optional but recommended)
+  - `SCHWAB_REDIRECT_URI` (defaults to `http://localhost`)
 - API base URLs are resolved internally from proposition mappings.
+
+### Schwab token setup and rotation
+
+1. Create a Schwab developer app and complete OAuth authorization in your own token workflow.
+2. Export the current access token into this service:
+
+```bash
+export SCHWAB_ACCESS_TOKEN="YOUR_CURRENT_ACCESS_TOKEN"
+```
+
+3. To enable automatic refresh, also configure:
+
+```bash
+export SCHWAB_REFRESH_TOKEN="YOUR_CURRENT_REFRESH_TOKEN"
+export CLIENT_ID="YOUR_SCHWAB_APP_CLIENT_ID"
+export CLIENT_SECRET="YOUR_SCHWAB_APP_CLIENT_SECRET"
+# Optional but recommended (epoch ms)
+export SCHWAB_ACCESS_TOKEN_EXPIRES_AT="1735689600000"
+```
+
+4. Persist these values in your local `.env`, then restart long-running processes (`npm run dev`, API container, or scheduled jobs).
+
+Notes:
+- This service does not perform interactive login; you still need an initial token pair (`SCHWAB_ACCESS_TOKEN` + `SCHWAB_REFRESH_TOKEN`) from your OAuth workflow.
+- When refresh is configured, the app automatically refreshes tokens and updates in-memory env values for the running process.
+- If refresh is not configured, rotate `SCHWAB_ACCESS_TOKEN` manually.
+
+Quick token health check (minimal API call):
+
+```bash
+npm run cli -- import VIX --from 2024-01-02 --to 2024-01-02
+```
+
+If the token is invalid/expired and refresh is unavailable, the command fails with an auth/provider error. If it succeeds (including `imported: 0`), authentication is working and the request reached the provider.
 
 ```bash
 cp .env.example .env

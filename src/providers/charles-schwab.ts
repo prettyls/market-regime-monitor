@@ -1,23 +1,31 @@
 import type { Bar } from "../domain/types.js";
-import { RestRequestFactory } from "../rest/request-factory.js";
+import { createApiClient, EnhancedTokenManager, type SchwabApiClient, type TokenData } from "@sudowealth/schwab-api";
 import type { HistoryRequest, MarketDataProvider } from "./provider.js";
 
-type SchwabCandle = Readonly<{
-  datetime: number | string;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  volume?: number;
+type SchwabPriceHistoryApi = Readonly<{
+  marketData: Readonly<{
+    priceHistory: Readonly<{
+      getPriceHistory: SchwabApiClient["marketData"]["priceHistory"]["getPriceHistory"];
+    }>;
+  }>;
 }>;
 
-type SchwabPriceHistoryResponse = Readonly<{
-  candles?: readonly SchwabCandle[];
+export type SchwabProviderAuth = Readonly<{
+  accessToken: string;
+  refreshToken?: string;
+  clientId?: string;
+  clientSecret?: string;
+  redirectUri?: string;
+  accessTokenExpiresAt?: number;
+  onTokenUpdate?: (tokenData: TokenData) => void | Promise<void>;
 }>;
+
+type SchwabClientFactory = (authConfig: SchwabProviderAuth) => SchwabPriceHistoryApi;
 
 const dayStartUtc = (date: Date): number => Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
 
-const toDate = (value: number | string): Date | undefined => {
+const toDate = (value: number | string | Date | null): Date | undefined => {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
   if (typeof value === "number" && Number.isFinite(value)) return new Date(value);
   if (typeof value === "string") {
     const date = new Date(value);
@@ -28,24 +36,47 @@ const toDate = (value: number | string): Date | undefined => {
 
 export class CharlesSchwabProvider implements MarketDataProvider {
   readonly name = "charles_schwab";
+  private readonly client: SchwabPriceHistoryApi;
 
   constructor(
-    private readonly fetcher: typeof fetch = fetch,
-    private readonly requestFactory: RestRequestFactory
-  ) {}
+    authConfig: SchwabProviderAuth,
+    clientFactory: SchwabClientFactory = (config) => {
+      let currentToken: TokenData = {
+        accessToken: config.accessToken,
+        ...(config.refreshToken ? { refreshToken: config.refreshToken } : {}),
+        ...(config.accessTokenExpiresAt ? { expiresAt: config.accessTokenExpiresAt } : {}),
+      };
+      const auth = new EnhancedTokenManager({
+        clientId: config.clientId ?? "static-token",
+        clientSecret: config.clientSecret ?? "static-token",
+        redirectUri: config.redirectUri ?? "http://localhost",
+        load: async () => currentToken,
+        save: async (nextToken) => {
+          currentToken = nextToken;
+          await config.onTokenUpdate?.(nextToken);
+        },
+      });
+      const client = createApiClient({ auth });
+      return {
+        marketData: {
+          priceHistory: client.marketData.priceHistory,
+        },
+      };
+    }
+  ) {
+    this.client = clientFactory(authConfig);
+  }
 
   async fetchHistory(request: HistoryRequest): Promise<readonly Bar[]> {
-    const params = new URLSearchParams({
-      symbol: request.symbol,
-      interval: request.interval,
-      ...(request.from ? { startDate: String(dayStartUtc(request.from)) } : {}),
-      ...(request.to ? { endDate: String(dayStartUtc(request.to)) } : {}),
+    const payload = await this.client.marketData.priceHistory.getPriceHistory({
+      queryParams: {
+        symbol: request.symbol,
+        frequencyType: "daily",
+        frequency: 1,
+        ...(request.from ? { startDate: dayStartUtc(request.from) } : {}),
+        ...(request.to ? { endDate: dayStartUtc(request.to) } : {}),
+      },
     });
-    const path = `/marketdata/v1/pricehistory?${params.toString()}`;
-    const response = await this.fetcher(this.requestFactory.create({ method: "GET", path }));
-    if (!response.ok) throw new Error(`charles_schwab returned HTTP ${response.status} for ${request.symbol}`);
-
-    const payload = (await response.json()) as SchwabPriceHistoryResponse;
     const bars = (payload.candles ?? [])
       .map((candle) => {
         const timestamp = toDate(candle.datetime);

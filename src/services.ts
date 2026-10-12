@@ -21,6 +21,12 @@ export class MarketService {
     return bars.length;
   }
 
+  async downloadHistory(symbol: string, from?: Date, to?: Date) {
+    const instrument = await this.requireInstrument(symbol);
+    const provider = this.providers.get(instrument.provider);
+    return provider.fetchHistory({ symbol: instrument.providerSymbol, interval: "1d", ...(from ? { from } : {}), ...(to ? { to } : {}) });
+  }
+
   async getHistory(symbol: string, from?: Date, to?: Date) {
     const instrument = await this.requireInstrument(symbol);
     return this.db.marketBar.findMany({

@@ -12,8 +12,10 @@ vi.mock("../src/services.js", () => ({
 vi.mock("pino", () => ({ default: vi.fn(() => ({})) }));
 
 const originalArgv = process.argv;
+const originalSchwabAccessToken = process.env.SCHWAB_ACCESS_TOKEN;
 afterEach(() => {
   process.argv = originalArgv;
+  process.env.SCHWAB_ACCESS_TOKEN = originalSchwabAccessToken;
   process.exitCode = undefined;
   vi.restoreAllMocks();
   vi.clearAllMocks();
@@ -21,6 +23,7 @@ afterEach(() => {
 
 it("reports service failures and disconnects without printing a stack trace", async () => {
   vi.resetModules();
+  process.env.SCHWAB_ACCESS_TOKEN = "test-token";
   const errorOutput = vi.spyOn(console, "error").mockImplementation(() => {});
   addInstrument.mockRejectedValueOnce(new Error("Provider unavailable"));
   process.argv = ["node", "src/cli.ts", "instrument:add", "--symbol", "SPX", "--name", "S&P 500", "--provider-symbol", "^SPX"];
@@ -32,6 +35,7 @@ it("reports service failures and disconnects without printing a stack trace", as
 
 it.each([false, true])("parses instrument:add with a forwarded separator: %s", async (separator) => {
   vi.resetModules();
+  process.env.SCHWAB_ACCESS_TOKEN = "test-token";
   vi.spyOn(console, "log").mockImplementation(() => {});
   process.argv = ["node", "src/cli.ts", ...(separator ? ["--"] : []), "instrument:add", "--symbol", "SPX", "--name", "S&P 500", "--provider-symbol", "^SPX"];
 
