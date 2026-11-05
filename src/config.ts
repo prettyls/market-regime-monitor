@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { InstrumentDefinition, PatternConfig } from "./domain/types.js";
 
-export const envSchema = z.object({ DATABASE_URL: z.string().min(1), PORT: z.coerce.number().int().positive().default(3000), HOST: z.string().default("0.0.0.0"), LOG_LEVEL: z.string().default("info") });
+export const envSchema = z.object({ DATABASE_URL: z.string().min(1), PORT: z.coerce.number().int().positive().default(3000), HOST: z.string().default("0.0.0.0"), LOG_LEVEL: z.string().default("info"), DATA_PROVIDER: z.string().min(1).default("schawb") });
 export const env = () => envSchema.parse(process.env);
 
 export const defaultPatternConfig: PatternConfig = {
@@ -11,4 +11,4 @@ export const defaultPatternConfig: PatternConfig = {
   trend: { fastPeriod: 10, slowPeriod: 30, slopePeriod: 10 }
 };
 
-export const vixDefinition: InstrumentDefinition = { symbol: "VIX", name: "CBOE Volatility Index", kind: "INDEX", provider: "cboe", providerSymbol: "VIX", config: defaultPatternConfig };
+export const vixDefinition: InstrumentDefinition = { symbol: "VIX", name: "CBOE Volatility Index", kind: "INDEX", provider: "charles_schwab", providerSymbol: "$VIX", config: defaultPatternConfig };

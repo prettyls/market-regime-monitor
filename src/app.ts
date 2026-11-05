@@ -2,7 +2,7 @@ import sensible from "@fastify/sensible";
 import Fastify, { type FastifyError } from "fastify";
 import { prisma } from "./db.js";
 import { ProviderRegistry } from "./providers/index.js";
-import { alertQuerySchema, historyQuerySchema, instrumentInputSchema } from "./schemas.js";
+import { alertQuerySchema, historyQuerySchema, instrumentInputSchema, priceHistoryQuerySchema } from "./schemas.js";
 import { MarketService } from "./services.js";
 
 export function buildApp() {
@@ -13,6 +13,7 @@ export function buildApp() {
   app.get("/api/v1/instruments", async () => prisma.instrument.findMany({ orderBy: { symbol: "asc" } }));
   app.post("/api/v1/instruments", async (request, reply) => reply.code(201).send(await service.addInstrument(instrumentInputSchema.parse(request.body))));
   app.post("/api/v1/instruments/:symbol/import", async (request) => { const { symbol } = request.params as { symbol: string }; const query = historyQuerySchema.parse(request.query); return { imported: await service.importHistory(symbol, query.from, query.to) }; });
+  app.get("/api/v1/instruments/:symbol/pricehistory", async (request) => { const { symbol } = request.params as { symbol: string }; const query = priceHistoryQuerySchema.parse(request.query); return service.downloadHistory(symbol, query.from, query.to); });
   app.get("/api/v1/instruments/:symbol/data", async (request) => { const { symbol } = request.params as { symbol: string }; return prisma.marketBar.findMany({ where: { instrument: { symbol: symbol.toUpperCase() } }, orderBy: { timestamp: "desc" }, take: 500 }); });
   app.post("/api/v1/instruments/:symbol/analyze", async (request) => service.analyze((request.params as { symbol: string }).symbol));
   app.get("/api/v1/instruments/:symbol/analysis", async (request) => prisma.analysis.findFirst({ where: { instrument: { symbol: (request.params as { symbol: string }).symbol.toUpperCase() } }, orderBy: { timestamp: "desc" } }));

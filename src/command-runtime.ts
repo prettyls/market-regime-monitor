@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { Command, CommanderError } from "commander";
 import pino from "pino";
 import { prisma } from "./db.js";
