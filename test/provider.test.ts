@@ -59,16 +59,16 @@ describe("ProviderRegistry", () => {
     SCHWAB_REFRESH_TOKEN: process.env.SCHWAB_REFRESH_TOKEN,
     CLIENT_ID: process.env.CLIENT_ID,
     CLIENT_SECRET: process.env.CLIENT_SECRET,
+    SCHWAB_CLIENT_ID: process.env.SCHWAB_CLIENT_ID,
+    SCHWAB_CLIENT_SECRET: process.env.SCHWAB_CLIENT_SECRET,
     SCHWAB_ACCESS_TOKEN_EXPIRES_AT: process.env.SCHWAB_ACCESS_TOKEN_EXPIRES_AT,
   };
 
   const restoreEnv = () => {
-    process.env.DATA_PROVIDER = originalEnv.DATA_PROVIDER;
-    process.env.SCHWAB_ACCESS_TOKEN = originalEnv.SCHWAB_ACCESS_TOKEN;
-    process.env.SCHWAB_REFRESH_TOKEN = originalEnv.SCHWAB_REFRESH_TOKEN;
-    process.env.CLIENT_ID = originalEnv.CLIENT_ID;
-    process.env.CLIENT_SECRET = originalEnv.CLIENT_SECRET;
-    process.env.SCHWAB_ACCESS_TOKEN_EXPIRES_AT = originalEnv.SCHWAB_ACCESS_TOKEN_EXPIRES_AT;
+    for (const [key, value] of Object.entries(originalEnv)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
   };
 
   afterEach(() => {
@@ -93,6 +93,18 @@ describe("ProviderRegistry", () => {
     expect(() => new ProviderRegistry()).toThrow(".env.example placeholder");
   });
 
+  it("rejects placeholder Schwab client credentials used for token refresh", () => {
+    process.env.DATA_PROVIDER = "schawb";
+    process.env.SCHWAB_ACCESS_TOKEN = "token";
+    process.env.SCHWAB_REFRESH_TOKEN = "refresh-token";
+    delete process.env.SCHWAB_CLIENT_ID;
+    delete process.env.SCHWAB_CLIENT_SECRET;
+    process.env.CLIENT_ID = "YOUR_DEVELOPER_CLIENT_ID";
+    process.env.CLIENT_SECRET = "YOUR_DEVELOPER_CLIENT_SECRETS";
+
+    expect(() => new ProviderRegistry()).toThrow(/\.env\.example placeholder for CLIENT_ID, CLIENT_SECRET/);
+  });
+
   it("derives access-token expiry from the token response instead of the environment", () => {
     process.env.DATA_PROVIDER = "schawb";
     process.env.SCHWAB_ACCESS_TOKEN = "token";
@@ -109,6 +121,8 @@ describe("ProviderRegistry", () => {
     process.env.SCHWAB_REFRESH_TOKEN = "refresh-token";
     delete process.env.CLIENT_ID;
     delete process.env.CLIENT_SECRET;
+    delete process.env.SCHWAB_CLIENT_ID;
+    delete process.env.SCHWAB_CLIENT_SECRET;
 
     expect(() => new ProviderRegistry()).toThrow("SCHWAB_REFRESH_TOKEN requires CLIENT_ID and CLIENT_SECRET");
   });

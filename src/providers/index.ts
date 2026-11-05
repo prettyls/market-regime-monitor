@@ -24,9 +24,15 @@ const resolveSchwabProviderAuthFromEnv = (): SchwabProviderAuth => {
   const refreshToken = readNonEmpty(process.env.SCHWAB_REFRESH_TOKEN);
   const clientId = readNonEmpty(process.env.SCHWAB_CLIENT_ID, process.env.CLIENT_ID);
   const clientSecret = readNonEmpty(process.env.SCHWAB_CLIENT_SECRET, process.env.CLIENT_SECRET);
-  if (isExampleValue(accessToken) || (refreshToken !== undefined && isExampleValue(refreshToken))) {
+  const placeholderFields = [
+    ["SCHWAB_ACCESS_TOKEN", accessToken],
+    ["SCHWAB_REFRESH_TOKEN", refreshToken],
+    ["CLIENT_ID", clientId],
+    ["CLIENT_SECRET", clientSecret],
+  ].flatMap(([name, value]) => (value !== undefined && isExampleValue(value) ? [name] : []));
+  if (placeholderFields.length > 0) {
     throw new Error(
-      "Schwab token configuration contains a .env.example placeholder. Complete the Schwab OAuth authorization-code flow and set the issued SCHWAB_ACCESS_TOKEN and SCHWAB_REFRESH_TOKEN. CLIENT_ID and CLIENT_SECRET cannot authenticate API requests by themselves."
+      `Schwab configuration contains a .env.example placeholder for ${placeholderFields.join(", ")}. Set the issued SCHWAB_ACCESS_TOKEN and SCHWAB_REFRESH_TOKEN from the OAuth flow, and set CLIENT_ID and CLIENT_SECRET (or SCHWAB_CLIENT_ID and SCHWAB_CLIENT_SECRET) from the Schwab Developer Portal. Client credentials cannot authenticate API requests by themselves.`
     );
   }
   if (refreshToken && (!clientId || !clientSecret)) {
