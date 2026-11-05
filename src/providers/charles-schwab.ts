@@ -16,7 +16,6 @@ export type SchwabProviderAuth = Readonly<{
   clientId?: string;
   clientSecret?: string;
   redirectUri?: string;
-  accessTokenExpiresAt?: number;
   onTokenUpdate?: (tokenData: TokenData) => void | Promise<void>;
 }>;
 
@@ -44,7 +43,6 @@ export class CharlesSchwabProvider implements MarketDataProvider {
       let currentToken: TokenData = {
         accessToken: config.accessToken,
         ...(config.refreshToken ? { refreshToken: config.refreshToken } : {}),
-        ...(config.accessTokenExpiresAt ? { expiresAt: config.accessTokenExpiresAt } : {}),
       };
       const auth = new EnhancedTokenManager({
         clientId: config.clientId ?? "static-token",
@@ -71,6 +69,8 @@ export class CharlesSchwabProvider implements MarketDataProvider {
     const payload = await this.client.marketData.priceHistory.getPriceHistory({
       queryParams: {
         symbol: request.symbol,
+        // Schwab defaults periodType to "day", which rejects daily frequency. "year" allows daily bars.
+        periodType: "year",
         frequencyType: "daily",
         frequency: 1,
         ...(request.from ? { startDate: dayStartUtc(request.from) } : {}),

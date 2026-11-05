@@ -25,6 +25,7 @@ describe("CharlesSchwabProvider", () => {
     expect(getPriceHistory).toHaveBeenCalledWith({
       queryParams: expect.objectContaining({
         symbol: "$VIX",
+        periodType: "year",
         frequencyType: "daily",
         frequency: 1,
       }),
@@ -58,6 +59,7 @@ describe("ProviderRegistry", () => {
     SCHWAB_REFRESH_TOKEN: process.env.SCHWAB_REFRESH_TOKEN,
     CLIENT_ID: process.env.CLIENT_ID,
     CLIENT_SECRET: process.env.CLIENT_SECRET,
+    SCHWAB_ACCESS_TOKEN_EXPIRES_AT: process.env.SCHWAB_ACCESS_TOKEN_EXPIRES_AT,
   };
 
   const restoreEnv = () => {
@@ -66,6 +68,7 @@ describe("ProviderRegistry", () => {
     process.env.SCHWAB_REFRESH_TOKEN = originalEnv.SCHWAB_REFRESH_TOKEN;
     process.env.CLIENT_ID = originalEnv.CLIENT_ID;
     process.env.CLIENT_SECRET = originalEnv.CLIENT_SECRET;
+    process.env.SCHWAB_ACCESS_TOKEN_EXPIRES_AT = originalEnv.SCHWAB_ACCESS_TOKEN_EXPIRES_AT;
   };
 
   afterEach(() => {
@@ -78,6 +81,26 @@ describe("ProviderRegistry", () => {
     delete process.env.SCHWAB_REFRESH_TOKEN;
 
     expect(() => new ProviderRegistry()).toThrow("SCHWAB_ACCESS_TOKEN is required when DATA_PROVIDER is Schwab");
+  });
+
+  it("rejects Schwab token placeholders from .env.example", () => {
+    process.env.DATA_PROVIDER = "schawb";
+    process.env.SCHWAB_ACCESS_TOKEN = "YOUR_SCHWAB_ACCESS_TOKEN";
+    process.env.SCHWAB_REFRESH_TOKEN = "YOUR_SCHWAB_REFRESH_TOKEN";
+    process.env.CLIENT_ID = "client-id";
+    process.env.CLIENT_SECRET = "client-secret";
+
+    expect(() => new ProviderRegistry()).toThrow(".env.example placeholder");
+  });
+
+  it("derives access-token expiry from the token response instead of the environment", () => {
+    process.env.DATA_PROVIDER = "schawb";
+    process.env.SCHWAB_ACCESS_TOKEN = "token";
+    delete process.env.SCHWAB_REFRESH_TOKEN;
+    process.env.SCHWAB_ACCESS_TOKEN_EXPIRES_AT = "not-a-timestamp";
+
+    expect(() => new ProviderRegistry()).not.toThrow();
+    expect(process.env.SCHWAB_ACCESS_TOKEN_EXPIRES_AT).toBeUndefined();
   });
 
   it("requires Schwab credentials when refresh token is set", () => {

@@ -11,6 +11,8 @@ const readNonEmpty = (...values: Array<string | undefined>): string | undefined 
   return undefined;
 };
 
+const isExampleValue = (value: string): boolean => /^YOUR_[A-Z0-9_]+$/.test(value);
+
 const resolveSchwabProviderAuthFromEnv = (): SchwabProviderAuth => {
   const accessToken = readNonEmpty(process.env.SCHWAB_ACCESS_TOKEN);
   if (!accessToken) {
@@ -22,15 +24,16 @@ const resolveSchwabProviderAuthFromEnv = (): SchwabProviderAuth => {
   const refreshToken = readNonEmpty(process.env.SCHWAB_REFRESH_TOKEN);
   const clientId = readNonEmpty(process.env.SCHWAB_CLIENT_ID, process.env.CLIENT_ID);
   const clientSecret = readNonEmpty(process.env.SCHWAB_CLIENT_SECRET, process.env.CLIENT_SECRET);
+  if (isExampleValue(accessToken) || (refreshToken !== undefined && isExampleValue(refreshToken))) {
+    throw new Error(
+      "Schwab token configuration contains a .env.example placeholder. Complete the Schwab OAuth authorization-code flow and set the issued SCHWAB_ACCESS_TOKEN and SCHWAB_REFRESH_TOKEN. CLIENT_ID and CLIENT_SECRET cannot authenticate API requests by themselves."
+    );
+  }
   if (refreshToken && (!clientId || !clientSecret)) {
     throw new Error("SCHWAB_REFRESH_TOKEN requires CLIENT_ID and CLIENT_SECRET (or SCHWAB_CLIENT_ID/SCHWAB_CLIENT_SECRET).");
   }
 
-  const expiresAtRaw = readNonEmpty(process.env.SCHWAB_ACCESS_TOKEN_EXPIRES_AT);
-  const expiresAt = expiresAtRaw ? Number(expiresAtRaw) : undefined;
-  if (expiresAtRaw && (expiresAt === undefined || !Number.isFinite(expiresAt))) {
-    throw new Error("SCHWAB_ACCESS_TOKEN_EXPIRES_AT must be a valid epoch-milliseconds number when provided.");
-  }
+  delete process.env.SCHWAB_ACCESS_TOKEN_EXPIRES_AT;
 
   const redirectUri = readNonEmpty(process.env.SCHWAB_REDIRECT_URI);
   const authConfig: SchwabProviderAuth = {
@@ -39,13 +42,10 @@ const resolveSchwabProviderAuthFromEnv = (): SchwabProviderAuth => {
     ...(clientId ? { clientId } : {}),
     ...(clientSecret ? { clientSecret } : {}),
     ...(redirectUri ? { redirectUri } : {}),
-    ...(expiresAt === undefined ? {} : { accessTokenExpiresAt: expiresAt }),
     onTokenUpdate: (tokenData) => {
       process.env.SCHWAB_ACCESS_TOKEN = tokenData.accessToken;
       if (tokenData.refreshToken) process.env.SCHWAB_REFRESH_TOKEN = tokenData.refreshToken;
       else delete process.env.SCHWAB_REFRESH_TOKEN;
-      if (tokenData.expiresAt === undefined) delete process.env.SCHWAB_ACCESS_TOKEN_EXPIRES_AT;
-      else process.env.SCHWAB_ACCESS_TOKEN_EXPIRES_AT = String(tokenData.expiresAt);
     },
   };
   return authConfig;

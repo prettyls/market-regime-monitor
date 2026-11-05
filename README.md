@@ -23,7 +23,6 @@ Environment:
 - Optional automatic refresh variables:
   - `SCHWAB_REFRESH_TOKEN`
   - `CLIENT_ID`/`CLIENT_SECRET` (or `SCHWAB_CLIENT_ID`/`SCHWAB_CLIENT_SECRET`)
-  - `SCHWAB_ACCESS_TOKEN_EXPIRES_AT` (epoch milliseconds, optional but recommended)
   - `SCHWAB_REDIRECT_URI` (defaults to `http://localhost`)
 - API base URLs are resolved internally from proposition mappings.
 
@@ -42,15 +41,13 @@ export SCHWAB_ACCESS_TOKEN="YOUR_CURRENT_ACCESS_TOKEN"
 export SCHWAB_REFRESH_TOKEN="YOUR_CURRENT_REFRESH_TOKEN"
 export CLIENT_ID="YOUR_SCHWAB_APP_CLIENT_ID"
 export CLIENT_SECRET="YOUR_SCHWAB_APP_CLIENT_SECRET"
-# Optional but recommended (epoch ms)
-export SCHWAB_ACCESS_TOKEN_EXPIRES_AT="1735689600000"
 ```
 
 4. Persist these values in your local `.env`, then restart long-running processes (`npm run dev`, API container, or scheduled jobs).
 
 Notes:
 - This service does not perform interactive login; you still need an initial token pair (`SCHWAB_ACCESS_TOKEN` + `SCHWAB_REFRESH_TOKEN`) from your OAuth workflow.
-- When refresh is configured, the app automatically refreshes tokens and updates in-memory env values for the running process.
+- When refresh is configured, the app refreshes the access token and keeps the `expires_in` value from Schwab's token response in memory for the running process.
 - If refresh is not configured, rotate `SCHWAB_ACCESS_TOKEN` manually.
 
 Quick token health check (minimal API call):
