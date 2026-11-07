@@ -1,5 +1,5 @@
 substitutions:
-  _REGION: us-central1
+  _REGION: us-east4
   _REPOSITORY: market-regime-monitor
   _TAG: dev
 steps:
