@@ -157,7 +157,29 @@ docker compose -f docker-compose.yml -f compose.app.yml up --build -d
 curl --fail http://localhost:8080/health
 ```
 
-The production image supports all four modes. Cloud Run uses an API service plus separate Collector and Backtest jobs, with a migration job applied before deployment. See [Docker and Cloud Run deployment](docs/cloud-run.md) for image commands, Cloud SQL and Secret Manager setup, and the deployment script. The API requires authenticated Cloud Run access by default.
+The production image supports all four modes. Cloud Run uses an API service plus separate Collector and Backtest jobs, with a migration job applied before deployment. See [Docker and Cloud Run deployment](docs/cloud-run.md) for image commands, Cloud SQL and Secret Manager setup, and the deployment script. The API requires authenticated Cloud Run access by default. A request to the `*.run.app` URL without a Google identity token returns 403 before it reaches the application.
+
+Set `PROJECT_ID` and `REGION` to the Cloud Run service, then choose one of these setups before calling the API from Postman or another REST client. The caller account needs `roles/run.invoker` on the service.
+
+Proxy the service to localhost. Leave this process running, and point the client at `http://localhost:8081`. The proxy attaches your gcloud credentials, so the client sends no auth header.
+
+```bash
+gcloud run services proxy market-regime-monitor \
+  --project="$PROJECT_ID" --region="$REGION" --port=8081
+```
+
+Call the Cloud Run URL directly with a bearer token. In Postman, set Authorization to Bearer Token and paste the command output. The token expires after about one hour; run the command again and replace it.
+
+```bash
+gcloud auth print-identity-token
+```
+
+```bash
+curl --fail --location "https://market-regime-monitor-PROJECT_NUMBER.${REGION}.run.app/api/v1/instruments" \
+  --header "Authorization: Bearer $(gcloud auth print-identity-token)"
+```
+
+Use the service URL from `gcloud run services describe market-regime-monitor --project="$PROJECT_ID" --region="$REGION" --format='value(status.url)'`. The Schwab access and refresh tokens configure market-data collection on the server. They do not authorize calls to this API.
 
 ## Development
 
