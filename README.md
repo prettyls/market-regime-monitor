@@ -118,6 +118,8 @@ npm run cli -- backtest SPX
 
 | Method | Path | Purpose |
 |---|---|---|
+| GET | `/` | Web UI |
+| GET | `/instruments/new` | Web UI form to add an instrument |
 | GET | `/health` | Liveness check |
 | GET/POST | `/api/v1/instruments` | List or configure instruments |
 | POST | `/api/v1/instruments/:symbol/import?from=YYYY-MM-DD&to=YYYY-MM-DD` | Import/upsert history |
@@ -127,6 +129,20 @@ npm run cli -- backtest SPX
 | GET | `/api/v1/signals/:symbol` | Latest detector signals |
 | GET | `/api/v1/alerts?symbol=VIX&severity=WARNING` | Query alerts |
 | GET | `/api/v1/instruments/:symbol/backtest` | One-bar forward returns grouped by regime |
+
+`POST .../analyze` and `GET .../analysis` also return a `status` and `color` derived from the breakout and trend detector signals:
+
+| Status | Color | Condition |
+|---|---|---|
+| `ALERT` | red | Breakout confirmed up or down |
+| `WARNING` | orange | Trend up or down, no confirmed breakout |
+| `NORMAL` | green | No confirmed breakout and no trend |
+
+## Web UI
+
+Open `http://localhost:3000/` while the API is running. Select an instrument to load its latest analysis, then use **Import data** (optional from/to dates), **Run analysis**, or **Load latest** to call the API. The page shows the color-coded status, regime, score, confidence, detector signals, evidence, and recent alerts for the instrument.
+
+Use **Add instrument** in the header (or open `http://localhost:3000/instruments/new`) to add an instrument. The form takes the symbol, name, kind, provider (only providers enabled by `DATA_PROVIDER` are listed), and provider symbol (defaults to the symbol), with an optional pattern config prefilled with the defaults. Saving an existing symbol asks for confirmation before overwriting it, and success returns to the monitor with the new instrument selected.
 
 Example instrument body:
 

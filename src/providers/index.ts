@@ -75,5 +75,7 @@ export class ProviderRegistry {
     throw new Error(`Unsupported provider mapping for proposition: ${proposition.proposition}`);
   }
 
+  names(): string[] { return [...this.providers.keys()]; }
+
   get(name: string): MarketDataProvider { const provider = this.providers.get(name); if (!provider) throw new Error(`Unknown provider: ${name}`); return provider; }
 }

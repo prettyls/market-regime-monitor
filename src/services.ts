@@ -2,19 +2,20 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 import type { AnalysisResult, Bar, InstrumentDefinition, PatternConfig } from "./domain/types.js";
 import { CompositeRegimeStrategy } from "./domain/strategy.js";
 import { ProviderRegistry } from "./providers/index.js";
+import { resolveProviderSymbol } from "./providers/symbols.js";
 
 export class MarketService {
   constructor(private readonly db: PrismaClient, private readonly providers: ProviderRegistry, private readonly logger: Pick<Console, "info" | "warn">, private readonly strategy = new CompositeRegimeStrategy()) {}
 
   async addInstrument(definition: InstrumentDefinition) {
-    return this.db.instrument.upsert({ where: { symbol: definition.symbol }, create: { ...definition, config: definition.config as unknown as Prisma.InputJsonValue }, update: { name: definition.name, kind: definition.kind, provider: definition.provider, providerSymbol: definition.providerSymbol, config: definition.config as unknown as Prisma.InputJsonValue } });
+    const providerSymbol = resolveProviderSymbol(definition);
+    return this.db.instrument.upsert({ where: { symbol: definition.symbol }, create: { ...definition, providerSymbol, config: definition.config as unknown as Prisma.InputJsonValue }, update: { name: definition.name, kind: definition.kind, provider: definition.provider, providerSymbol, config: definition.config as unknown as Prisma.InputJsonValue } });
   }
 
   async importHistory(symbol: string, from?: Date, to?: Date): Promise<number> {
     const instrument = await this.requireInstrument(symbol);
     const provider = this.providers.get(instrument.provider);
-    const providerSymbol = instrument.providerSymbol;
-    const bars = await provider.fetchHistory({ symbol: providerSymbol, interval: "1d", ...(from ? { from } : {}), ...(to ? { to } : {}) });
+    const bars = await provider.fetchHistory({ symbol: resolveProviderSymbol(instrument), interval: "1d", ...(from ? { from } : {}), ...(to ? { to } : {}) });
     if (bars.length === 0) return 0;
     await this.db.$transaction(bars.map((bar) => this.db.marketBar.upsert({ where: { instrumentId_timestamp_interval: { instrumentId: instrument.id, timestamp: bar.timestamp, interval: "1d" } }, create: { instrumentId: instrument.id, interval: "1d", source: provider.name, ...bar }, update: { source: provider.name, ...bar } })));
     this.logger.info({ symbol, count: bars.length, provider: provider.name }, "historical bars imported");
@@ -24,7 +25,7 @@ export class MarketService {
   async downloadHistory(symbol: string, from?: Date, to?: Date) {
     const instrument = await this.requireInstrument(symbol);
     const provider = this.providers.get(instrument.provider);
-    return provider.fetchHistory({ symbol: instrument.providerSymbol, interval: "1d", ...(from ? { from } : {}), ...(to ? { to } : {}) });
+    return provider.fetchHistory({ symbol: resolveProviderSymbol(instrument), interval: "1d", ...(from ? { from } : {}), ...(to ? { to } : {}) });
   }
 
   async getHistory(symbol: string, from?: Date, to?: Date) {
