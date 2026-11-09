@@ -173,7 +173,7 @@ docker compose -f docker-compose.yml -f compose.app.yml up --build -d
 curl --fail http://localhost:8080/health
 ```
 
-The production image supports all four modes. Cloud Run uses an API service plus separate Collector and Backtest jobs, with a migration job applied before deployment. See [Docker and Cloud Run deployment](docs/cloud-run.md) for image commands, Cloud SQL and Secret Manager setup, and the deployment script. The API requires authenticated Cloud Run access by default. A request to the `*.run.app` URL without a Google identity token returns 403 before it reaches the application.
+The production image supports all four modes. Cloud Run uses an API service plus separate Collector and Backtest jobs, with a migration job applied before deployment. A push to `main` runs the same Cloud Build release. See [Docker and Cloud Run deployment](docs/cloud-run.md) for image commands, AlloyDB and Secret Manager setup, and the trigger. The API requires authenticated Cloud Run access by default. A request to the `*.run.app` URL without a Google identity token returns 403 before it reaches the application.
 
 Set `PROJECT_ID` and `REGION` to the Cloud Run service, then choose one of these setups before calling the API from Postman or another REST client. The caller account needs `roles/run.invoker` on the service.
 

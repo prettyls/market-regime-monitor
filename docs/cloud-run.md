@@ -33,19 +33,16 @@ Set your own values:
 
 ```bash
 export PROJECT_ID="your-project-id"
-export REGION="us-central1"
-export SERVICE_ACCOUNT="market-regime-monitor@${PROJECT_ID}.iam.gserviceaccount.com"
-export DATABASE_SECRET="market-regime-database-url"
-export SECRET_VERSION="1"
-export VPC_CONNECTOR="projects/${PROJECT_ID}/locations/${REGION}/connectors/your-vpc-connector"
+export REGION="us-east4"
 export VPC_EGRESS="private-ranges-only"
+export VPC_NETWORK="default"
+export VPC_SUBNET="default"
 
 gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com secretmanager.googleapis.com --project="$PROJECT_ID"
 gcloud artifacts repositories create market-regime-monitor --repository-format=docker --location="$REGION" --project="$PROJECT_ID"
-gcloud iam service-accounts create market-regime-monitor --project="$PROJECT_ID"
 ```
 
-Skip create commands for resources you already have. Create the application database and a password-authenticated database user in AlloyDB. Ensure Cloud Run can route to the AlloyDB private IP (same VPC or VPC connector path), because this deployment uses a standard PostgreSQL TCP URL.
+Skip create commands for resources you already have. Create the application database and a password-authenticated database user in AlloyDB. The current service reaches that private IP with Direct VPC egress on the `default` network and `default` subnet (`private-ranges-only`). A VPC connector is optional: set `VPC_CONNECTOR` to its resource name and leave `VPC_NETWORK` unused. Cloud Run cannot use a connector and Direct VPC egress on the same revision.
 
 Create a Secret Manager secret named `market-regime-database-url` in the console. Put the complete connection URL in its value:
 
@@ -53,15 +50,17 @@ Create a Secret Manager secret named `market-regime-database-url` in the console
 postgresql://DB_USER:DB_PASSWORD@ALLOYDB_PRIVATE_IP:5432/postgres?schema=public&sslmode=require
 ```
 
-Replace the placeholders, URL-encode special characters in credentials, and set `SECRET_VERSION` to the created numeric version. Do not commit this value or bake it into the image. If the password is stored separately in Secret Manager, compose the final URL at deployment time and inject it as `DATABASE_URL`. Allow the runtime identity to read this secret:
+Replace the placeholders and URL-encode special characters in credentials. Do not commit this value or bake it into the image. The current API and migration job already have `DATABASE_URL` set as an environment variable, and a deploy leaves that value in place. To bind the secret instead, set `DATABASE_SECRET=market-regime-database-url`. That replaces the plain `DATABASE_URL` variable on the next release. `SECRET_VERSION` defaults to `latest`; set it to a number to pin one version. Allow the runtime identity to read this secret:
 
 ```bash
+export DATABASE_SECRET="market-regime-database-url"
+export SERVICE_ACCOUNT="$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')-compute@developer.gserviceaccount.com"
 gcloud secrets add-iam-policy-binding "$DATABASE_SECRET" --project="$PROJECT_ID" --member="serviceAccount:$SERVICE_ACCOUNT" --role=roles/secretmanager.secretAccessor
 ```
 
-The deploying identity needs Cloud Build submission, Cloud Run administration, and permission to act as the runtime service account. The project's Cloud Build identity needs Artifact Registry Writer on the repository, access to the build source bucket, and permission to write build logs. Check your project's actual build identity rather than assuming a legacy default service account. Database migrations use the same database credentials here, so that user must own the application schema and be allowed to create/alter its tables.
+The deploying identity needs Cloud Build submission, Cloud Run administration, and permission to act as the runtime service account. Database migrations use the same database credentials here, so that user must own the application schema and be allowed to create/alter its tables.
 
-`VPC_CONNECTOR` is required by [deploy-cloud-run.sh](/Users/ranliu/git/market-regime-monitor/scripts/deploy-cloud-run.sh), and `VPC_EGRESS` is optional (defaults to `private-ranges-only`).
+[deploy-cloud-run.sh](../scripts/deploy-cloud-run.sh) defaults to Direct VPC egress in `us-east4` and the default Compute Engine service account. Set `REGION`, `VPC_NETWORK`, or `VPC_SUBNET` when the resources differ. Set `SERVICE_ACCOUNT_ID` to a service account name in this project to run as that account instead of the default Compute Engine account.
 
 ## Build and deploy
 
@@ -69,14 +68,16 @@ The deploying identity needs Cloud Build submission, Cloud Run administration, a
 bash scripts/deploy-cloud-run.sh
 ```
 
-This command uploads the source filtered by `.gcloudignore`, builds and pushes two images via `cloudbuild.yaml`, then:
+This uploads the source filtered by `.gcloudignore` and runs [cloudbuild.yaml](../cloudbuild.yaml). The build runs the image tests, pushes the runtime and migration images, then:
 
 1. Deploys and executes a migration job, waiting for success.
 2. Deploys an authenticated API service on port 8080.
 3. Creates Collector and Backtest jobs without executing them.
 4. Creates a seed job without executing it.
 
-Each deployment uses a timestamp image tag. Set `IMAGE_TAG` for an explicit release identifier. `SERVICE_NAME`, `REPOSITORY`, and `DATABASE_SECRET` are also configurable. The defaults name the service `market-regime-monitor` and its jobs with `-migrate`, `-collect`, `-backtest`, and `-seed` suffixes. Re-running the script builds a new release and applies pending migrations before deploying it. Use backward-compatible migrations because an older API revision can still be serving during migration.
+A failed migration stops the build before the API or the other jobs change. The manual command tags images with a UTC timestamp. Set `IMAGE_TAG` for an explicit release identifier. `SERVICE_NAME`, `REPOSITORY`, `DATABASE_SECRET`, and `SECRET_VERSION` are also configurable. The defaults name the service `market-regime-monitor` and its jobs with `-migrate`, `-collect`, `-backtest`, and `-seed` suffixes. Re-running the script builds a new release and applies pending migrations before deploying it. Use backward-compatible migrations because an older API revision can still be serving during migration.
+
+Deploys set `NODE_ENV`, `LOG_LEVEL`, and `HOST` and leave every other environment variable in place, including `DATABASE_URL` and the Schwab tokens applied with [update-cloud-run-tokens.sh](../scripts/update-cloud-run-tokens.sh). Collector, Backtest, and Seed jobs created for the first time do not inherit those variables. Apply the tokens again after they exist, and set `DATABASE_URL` on each new job or set `DATABASE_SECRET` so the next deploy binds it.
 
 For a new database, seed and collect explicitly:
 
@@ -87,6 +88,26 @@ gcloud run jobs execute market-regime-monitor-backtest --project="$PROJECT_ID" -
 ```
 
 Jobs use one task and no automatic retries. Do not overlap collector executions. Collection uses all active configured instruments and can still fail if a data provider denies access. For periodic collection, configure Cloud Scheduler to execute the Collector job with a service account granted Cloud Run Invoker on that job. Choose a schedule and timezone before enabling it.
+
+## Deploy on each merge to main
+
+Connect GitHub once, then a push to `main` runs the same `cloudbuild.yaml`. The image tag is the commit's short SHA.
+
+```bash
+bash scripts/setup-cloud-build-trigger.sh
+```
+
+The script enables the deploy APIs and creates the Artifact Registry repository when it is missing. This project's default Cloud Build identity is the Compute Engine service account, which is also the API runtime identity, so the script creates `market-regime-deployer` and runs the trigger as that account. It grants the deployer:
+
+- `roles/run.admin` and `roles/logging.logWriter` on the project
+- `roles/artifactregistry.writer` on the project
+- `roles/iam.serviceAccountUser` on the runtime service account
+
+The Cloud Build service agent gets `roles/iam.serviceAccountUser` on the deployer so it can start those builds, and `roles/secretmanager.admin` so it can store the GitHub connection token. With `DATABASE_SECRET` set to a secret name, the script also grants `roles/secretmanager.secretAccessor` on that secret to the deployer and the runtime service account. The default `none` skips that grant.
+
+It then links `https://github.com/prettyls/market-regime-monitor.git` and creates the trigger `market-regime-monitor-main` for `^main$`. The first run prints a GitHub authorization URL. Install the Cloud Build GitHub App, then run the script again. The trigger stores the network, service account, and secret settings. Build logs are reported back to the GitHub commit.
+
+The trigger's service account is `market-regime-deployer@PROJECT_ID.iam.gserviceaccount.com`. That account is the deployer.
 
 ## API access and operations
 
@@ -111,3 +132,5 @@ To roll back application code, send traffic to the previous Cloud Run revision a
 - [AlloyDB connectivity options](https://cloud.google.com/alloydb/docs/connectivity-overview)
 - [Secret Manager configuration](https://docs.cloud.google.com/run/docs/configuring/services/secrets)
 - [Cloud Run job deployment flags](https://docs.cloud.google.com/sdk/gcloud/reference/run/jobs/deploy)
+- [Cloud Build triggers](https://cloud.google.com/build/docs/automating-builds/create-manage-triggers)
+- [Cloud Build GitHub connection](https://cloud.google.com/build/docs/automating-builds/github/connect-repo-github)

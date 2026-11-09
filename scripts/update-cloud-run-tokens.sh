@@ -3,8 +3,8 @@
 # Sets SCHWAB_ACCESS_TOKEN, SCHWAB_REFRESH_TOKEN, and the client id/secret the
 # process requires before it will start with a refresh token. Updates the API
 # service and any collect, backtest, and seed jobs that exist.
-# Does not rebuild the image. scripts/deploy-cloud-run.sh uses --set-env-vars,
-# so the next full deploy replaces env vars and drops tokens applied only here.
+# Does not rebuild the image. Cloud Build deploys with --update-env-vars and
+# --update-secrets, so tokens applied here remain on the next full deploy.
 #
 # Usage:
 #   PROJECT_ID=your-project-id REGION=us-east4 bash scripts/update-cloud-run-tokens.sh
@@ -16,7 +16,7 @@ fi
 set -euo pipefail
 
 : "${PROJECT_ID:?Set PROJECT_ID}"
-REGION=${REGION:-us-central1}
+REGION=${REGION:-us-east4}
 SERVICE_NAME=${SERVICE_NAME:-market-regime-monitor}
 ENV_FILE=${ENV_FILE:-.env}
 DRY_RUN=0
