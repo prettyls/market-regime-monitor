@@ -1,12 +1,59 @@
+# Push to main (Cloud Build trigger) and scripts/deploy-cloud-run.sh both run this file.
+# The trigger uses the commit as SHORT_SHA. A manual submit passes its own SHORT_SHA.
+# The running service uses Direct VPC egress and the default Compute Engine service account.
+# Set _VPC_CONNECTOR to a connector resource name to use a connector instead of _VPC_NETWORK.
+# Set _DATABASE_SECRET to a Secret Manager secret name to bind DATABASE_URL. "none" leaves it unchanged.
 substitutions:
   _REGION: us-east4
   _REPOSITORY: market-regime-monitor
-  _TAG: dev
+  _SERVICE_NAME: market-regime-monitor
+  _SERVICE_ACCOUNT_ID: default
+  _DATABASE_SECRET: none
+  _SECRET_VERSION: latest
+  _VPC_EGRESS: private-ranges-only
+  _VPC_NETWORK: default
+  _VPC_SUBNET: default
+  _VPC_CONNECTOR: none
+
+timeout: 7200s
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
 steps:
-  - name: gcr.io/cloud-builders/docker
-    args: [build, --target, runtime, -t, '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/app:${_TAG}', .]
-  - name: gcr.io/cloud-builders/docker
-    args: [build, --target, migration, -t, '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/migration:${_TAG}', .]
-images:
-  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/app:${_TAG}'
-  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/migration:${_TAG}'
+  # Migration and runtime share the build stage. Build migration first so the runtime image reuses those layers.
+  - id: build-migration
+    name: gcr.io/cloud-builders/docker
+    args: [build, --target, migration, -t, '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/migration:$SHORT_SHA', .]
+    waitFor: ['-']
+  - id: build-app
+    name: gcr.io/cloud-builders/docker
+    args: [build, --target, runtime, -t, '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/app:$SHORT_SHA', .]
+    waitFor: [build-migration]
+  - id: push-migration
+    name: gcr.io/cloud-builders/docker
+    args: [push, '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/migration:$SHORT_SHA']
+    waitFor: [build-migration]
+  - id: push-app
+    name: gcr.io/cloud-builders/docker
+    args: [push, '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/app:$SHORT_SHA']
+    waitFor: [build-app]
+  - id: deploy
+    name: gcr.io/cloud-builders/gcloud
+    entrypoint: bash
+    args: [scripts/cloud-build-deploy.sh]
+    waitFor: [push-app, push-migration]
+    env:
+      - PROJECT_ID=$PROJECT_ID
+      - PROJECT_NUMBER=$PROJECT_NUMBER
+      - SHORT_SHA=$SHORT_SHA
+      - _REGION=$_REGION
+      - _REPOSITORY=$_REPOSITORY
+      - _SERVICE_NAME=$_SERVICE_NAME
+      - _SERVICE_ACCOUNT_ID=$_SERVICE_ACCOUNT_ID
+      - _DATABASE_SECRET=$_DATABASE_SECRET
+      - _SECRET_VERSION=$_SECRET_VERSION
+      - _VPC_EGRESS=$_VPC_EGRESS
+      - _VPC_NETWORK=$_VPC_NETWORK
+      - _VPC_SUBNET=$_VPC_SUBNET
+      - _VPC_CONNECTOR=$_VPC_CONNECTOR
