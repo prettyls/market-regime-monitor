@@ -33,6 +33,29 @@ describe("CharlesSchwabProvider", () => {
     expect(result).toHaveLength(2);
     expect(result[0]?.close).toBe(13);
   });
+
+  it("requests the day after an inclusive end date so a one-day window is not empty", async () => {
+    const getPriceHistory = vi.fn().mockResolvedValue({
+      candles: [
+        { datetime: Date.parse("2026-11-06T00:00:00.000Z"), open: 20, high: 21, low: 19, close: 20.5, volume: 1 },
+        { datetime: Date.parse("2026-11-07T00:00:00.000Z"), open: 21, high: 22, low: 20, close: 21.5, volume: 1 },
+      ],
+    });
+    const provider = new CharlesSchwabProvider({ accessToken: "test-token" }, () => ({
+      marketData: { priceHistory: { getPriceHistory } },
+    }));
+    const day = new Date("2026-11-06T00:00:00.000Z");
+
+    const result = await provider.fetchHistory({ symbol: "$SPX", interval: "1d", from: day, to: day });
+
+    expect(getPriceHistory).toHaveBeenCalledWith({
+      queryParams: expect.objectContaining({
+        startDate: Date.parse("2026-11-06T00:00:00.000Z"),
+        endDate: Date.parse("2026-11-07T00:00:00.000Z"),
+      }),
+    });
+    expect(result.map((bar) => bar.close)).toEqual([20.5]);
+  });
 });
 
 describe("PropositionMapping", () => {

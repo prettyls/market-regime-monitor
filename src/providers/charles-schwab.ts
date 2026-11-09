@@ -21,6 +21,7 @@ export type SchwabProviderAuth = Readonly<{
 
 type SchwabClientFactory = (authConfig: SchwabProviderAuth) => SchwabPriceHistoryApi;
 
+const dayMs = 24 * 60 * 60 * 1000;
 const dayStartUtc = (date: Date): number => Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
 
 const toDate = (value: number | string | Date | null): Date | undefined => {
@@ -66,6 +67,9 @@ export class CharlesSchwabProvider implements MarketDataProvider {
   }
 
   async fetchHistory(request: HistoryRequest): Promise<readonly Bar[]> {
+    const start = request.from ? dayStartUtc(request.from) : undefined;
+    // Schwab rejects a zero-length window, and daily candles are stamped during the session, so the end is the next UTC midnight.
+    const inclusiveEnd = request.to ? dayStartUtc(request.to) : undefined;
     const payload = await this.client.marketData.priceHistory.getPriceHistory({
       queryParams: {
         symbol: request.symbol,
@@ -73,8 +77,8 @@ export class CharlesSchwabProvider implements MarketDataProvider {
         periodType: "year",
         frequencyType: "daily",
         frequency: 1,
-        ...(request.from ? { startDate: dayStartUtc(request.from) } : {}),
-        ...(request.to ? { endDate: dayStartUtc(request.to) } : {}),
+        ...(start !== undefined ? { startDate: start } : {}),
+        ...(inclusiveEnd !== undefined ? { endDate: inclusiveEnd + dayMs } : {}),
       },
     });
     const bars = (payload.candles ?? [])
@@ -96,6 +100,11 @@ export class CharlesSchwabProvider implements MarketDataProvider {
         return values.every((value) => Number.isFinite(value));
       });
 
-    return bars.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+    return bars
+      .filter((bar) => {
+        const day = dayStartUtc(bar.timestamp);
+        return (start === undefined || day >= start) && (inclusiveEnd === undefined || day <= inclusiveEnd);
+      })
+      .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
   }
 }
