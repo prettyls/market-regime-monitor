@@ -1,8 +1,9 @@
 import { Command, InvalidArgumentError } from "commander";
 import type { MarketService } from "./services.js";
+import { previousWeekday } from "./utility/time.js";
 
 type JobService = Pick<MarketService, "importHistory" | "analyze" | "backtest">;
-type Options = { symbol?: string; from?: Date; to?: Date };
+type Options = { symbol?: string; from?: Date; to?: Date; lastDay?: boolean };
 
 function parseDate(value: string): Date {
   const date = new Date(`${value}T00:00:00.000Z`);
@@ -21,10 +22,15 @@ export function createJobCommand(mode: "collect" | "backtest", service: JobServi
     });
   if (mode === "collect") {
     command.option("--from <date>", "inclusive import start date (YYYY-MM-DD, UTC)", parseDate)
-      .option("--to <date>", "inclusive import end date (YYYY-MM-DD, UTC)", parseDate);
+      .option("--to <date>", "inclusive import end date (YYYY-MM-DD, UTC)", parseDate)
+      .option("--last-day", "import only the previous weekday's daily bar in America/New_York");
   }
   return command.action(async (options: Options) => {
+    if (options.lastDay && (options.from || options.to)) throw new Error("--last-day cannot be combined with --from or --to");
     if (options.from && options.to && options.from > options.to) throw new Error("--from must be on or before --to");
+    const lastDay = options.lastDay ? previousWeekday() : undefined;
+    const from = lastDay ?? options.from;
+    const to = lastDay ?? options.to;
     const symbols = options.symbol ? [options.symbol] : await activeSymbols();
     if (symbols.length === 0) {
       output.log("No active instruments found. Add an instrument with the CLI first.");
@@ -34,7 +40,7 @@ export function createJobCommand(mode: "collect" | "backtest", service: JobServi
     for (const symbol of symbols) {
       try {
         if (mode === "collect") {
-          const imported = await service.importHistory(symbol, options.from, options.to);
+          const imported = await service.importHistory(symbol, from, to);
           if (imported === 0) {
             output.log({ symbol, imported, analysis: "skipped: no bars returned by provider" });
             continue;

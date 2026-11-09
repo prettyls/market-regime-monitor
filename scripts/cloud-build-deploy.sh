@@ -85,6 +85,37 @@ for mode in collect backtest; do
     --image="$app_image" --command=node --args="dist/src/${mode}.js"
 done
 
+echo "Deploying job ${_SERVICE_NAME}-daily"
+gcloud run jobs deploy "${_SERVICE_NAME}-daily" "${job_args[@]}" \
+  --image="$app_image" --command=node --args=dist/src/collect.js,--last-day
+
+echo "Granting ${service_account} permission to execute ${_SERVICE_NAME}-daily"
+gcloud run jobs add-iam-policy-binding "${_SERVICE_NAME}-daily" \
+  --project="$PROJECT_ID" \
+  --region="${_REGION}" \
+  --member="serviceAccount:${service_account}" \
+  --role="roles/run.invoker" \
+  --quiet >/dev/null
+
+daily_uri="https://run.googleapis.com/v2/projects/${PROJECT_ID}/locations/${_REGION}/jobs/${_SERVICE_NAME}-daily:run"
+scheduler_args=(
+  --project="$PROJECT_ID"
+  --location="${_REGION}"
+  --schedule="30 7 * * *"
+  --time-zone="America/New_York"
+  --uri="$daily_uri"
+  --http-method=POST
+  --oauth-service-account-email="$service_account"
+  --description="Import the previous weekday daily bar for each active instrument at 7:30am Eastern"
+)
+if gcloud scheduler jobs describe "${_SERVICE_NAME}-daily" --project="$PROJECT_ID" --location="${_REGION}" >/dev/null 2>&1; then
+  echo "Updating Cloud Scheduler job ${_SERVICE_NAME}-daily"
+  gcloud scheduler jobs update http "${_SERVICE_NAME}-daily" "${scheduler_args[@]}"
+else
+  echo "Creating Cloud Scheduler job ${_SERVICE_NAME}-daily"
+  gcloud scheduler jobs create http "${_SERVICE_NAME}-daily" "${scheduler_args[@]}"
+fi
+
 echo "Deploying job ${_SERVICE_NAME}-seed"
 gcloud run jobs deploy "${_SERVICE_NAME}-seed" "${job_args[@]}" \
   --image="$app_image" --command=node --args=dist/src/cli.js,seed

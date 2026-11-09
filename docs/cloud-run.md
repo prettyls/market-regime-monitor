@@ -38,7 +38,7 @@ export VPC_EGRESS="private-ranges-only"
 export VPC_NETWORK="default"
 export VPC_SUBNET="default"
 
-gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com secretmanager.googleapis.com --project="$PROJECT_ID"
+gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com secretmanager.googleapis.com cloudscheduler.googleapis.com --project="$PROJECT_ID"
 gcloud artifacts repositories create market-regime-monitor --repository-format=docker --location="$REGION" --project="$PROJECT_ID"
 ```
 
@@ -72,12 +72,13 @@ This uploads the source filtered by `.gcloudignore` and runs [cloudbuild.yaml](.
 
 1. Deploys and executes a migration job, waiting for success.
 2. Deploys an authenticated API service on port 8080.
-3. Creates Collector and Backtest jobs without executing them.
+3. Creates Collector, daily-bar, and Backtest jobs without executing them.
 4. Creates a seed job without executing it.
+5. Creates or updates a Cloud Scheduler job that runs the daily-bar job at 7:30am America/New_York.
 
-A failed migration stops the build before the API or the other jobs change. The manual command tags images with a UTC timestamp. Set `IMAGE_TAG` for an explicit release identifier. `SERVICE_NAME`, `REPOSITORY`, `DATABASE_SECRET`, and `SECRET_VERSION` are also configurable. The defaults name the service `market-regime-monitor` and its jobs with `-migrate`, `-collect`, `-backtest`, and `-seed` suffixes. Re-running the script builds a new release and applies pending migrations before deploying it. Use backward-compatible migrations because an older API revision can still be serving during migration.
+A failed migration stops the build before the API or the other jobs change. The manual command tags images with a UTC timestamp. Set `IMAGE_TAG` for an explicit release identifier. `SERVICE_NAME`, `REPOSITORY`, `DATABASE_SECRET`, and `SECRET_VERSION` are also configurable. The defaults name the service `market-regime-monitor` and its jobs with `-migrate`, `-collect`, `-daily`, `-backtest`, and `-seed` suffixes. The `-daily` job runs `node dist/src/collect.js --last-day`. Re-running the script builds a new release and applies pending migrations before deploying it. Use backward-compatible migrations because an older API revision can still be serving during migration.
 
-Deploys set `NODE_ENV`, `LOG_LEVEL`, and `HOST` and leave every other environment variable in place, including `DATABASE_URL` and the Schwab tokens applied with [update-cloud-run-tokens.sh](../scripts/update-cloud-run-tokens.sh). Collector, Backtest, and Seed jobs created for the first time do not inherit those variables. Apply the tokens again after they exist, and set `DATABASE_URL` on each new job or set `DATABASE_SECRET` so the next deploy binds it.
+Deploys set `NODE_ENV`, `LOG_LEVEL`, and `HOST` and leave every other environment variable in place, including `DATABASE_URL` and the Schwab tokens applied with [update-cloud-run-tokens.sh](../scripts/update-cloud-run-tokens.sh). Collector, daily-bar, Backtest, and Seed jobs created for the first time do not inherit those variables. Apply the tokens again after they exist, and set `DATABASE_URL` on each new job or set `DATABASE_SECRET` so the next deploy binds it.
 
 For a new database, seed and collect explicitly:
 
@@ -87,7 +88,9 @@ gcloud run jobs execute market-regime-monitor-collect --project="$PROJECT_ID" --
 gcloud run jobs execute market-regime-monitor-backtest --project="$PROJECT_ID" --region="$REGION" --wait
 ```
 
-Jobs use one task and no automatic retries. Do not overlap collector executions. Collection uses all active configured instruments and can still fail if a data provider denies access. For periodic collection, configure Cloud Scheduler to execute the Collector job with a service account granted Cloud Run Invoker on that job. Choose a schedule and timezone before enabling it.
+Jobs use one task and no automatic retries. Do not overlap collector executions. Collection uses all active configured instruments and can still fail if a data provider denies access.
+
+Each deploy ensures Cloud Scheduler job `market-regime-monitor-daily` posts to the Cloud Run jobs API at 07:30 America/New_York (`30 7 * * *`). That executes `market-regime-monitor-daily`, which imports the previous weekday's daily bar for every active instrument and then analyzes it. Saturday, Sunday, and Monday mornings import Friday. A market holiday returns no bar and skips analysis. Re-run [setup-cloud-build-trigger.sh](../scripts/setup-cloud-build-trigger.sh) once before the first scheduled deploy so the deployer can manage Cloud Scheduler and Cloud Scheduler can mint a token for the runtime service account. The runtime account receives `roles/run.invoker` on the daily job during deploy.
 
 ## Deploy on each merge to main
 
@@ -99,11 +102,11 @@ bash scripts/setup-cloud-build-trigger.sh
 
 The script enables the deploy APIs and creates the Artifact Registry repository when it is missing. This project's default Cloud Build identity is the Compute Engine service account, which is also the API runtime identity, so the script creates `market-regime-deployer` and runs the trigger as that account. It grants the deployer:
 
-- `roles/run.admin` and `roles/logging.logWriter` on the project
+- `roles/run.admin`, `roles/cloudscheduler.admin`, and `roles/logging.logWriter` on the project
 - `roles/artifactregistry.writer` on the project
 - `roles/iam.serviceAccountUser` on the runtime service account
 
-The Cloud Build service agent gets `roles/iam.serviceAccountUser` on the deployer so it can start those builds, and `roles/secretmanager.admin` so it can store the GitHub connection token. With `DATABASE_SECRET` set to a secret name, the script also grants `roles/secretmanager.secretAccessor` on that secret to the deployer and the runtime service account. The default `none` skips that grant.
+The Cloud Scheduler service agent gets `roles/iam.serviceAccountTokenCreator` on the runtime service account so the 7:30am job can execute. The Cloud Build service agent gets `roles/iam.serviceAccountUser` on the deployer so it can start those builds, and `roles/secretmanager.admin` so it can store the GitHub connection token. With `DATABASE_SECRET` set to a secret name, the script also grants `roles/secretmanager.secretAccessor` on that secret to the deployer and the runtime service account. The default `none` skips that grant.
 
 It then links `https://github.com/prettyls/market-regime-monitor.git` and creates the trigger `market-regime-monitor-main` for `^main$`. The first run prints a GitHub authorization URL. Install the Cloud Build GitHub App, then run the script again. The trigger stores the network, service account, and secret settings. Build logs are reported back to the GitHub commit.
 

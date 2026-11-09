@@ -77,7 +77,7 @@ The API listens on `http://localhost:3000`. Verify it with `GET /health`.
 | Mode | Command | Behavior |
 |---|---|---|
 | API | `npm run start:api` | Start the HTTP server from the compiled build; run `npm run build` first. |
-| Collector | `npm run collect` | Import daily history and analyze each active instrument, then exit. |
+| Collector | `npm run collect` | Import daily history and analyze each active instrument, then exit. `--last-day` imports only the previous weekday's bar. |
 | Backtest | `npm run backtest` | Evaluate stored history for each active instrument, print results, then exit. |
 | CLI | `npm run cli -- --help` | Show commands for instrument management, imports, analysis, and data inspection. |
 
@@ -85,6 +85,7 @@ All modes use the same database and instrument configuration. `npm start` is an 
 
 ```bash
 npm run collect
+npm run collect -- --last-day
 npm run collect -- --symbol VIX --from 2020-01-01 --to 2024-12-31
 npm run backtest
 npm run backtest -- --symbol VIX
@@ -93,7 +94,7 @@ npm run cli -- data --symbol VIX
 
 Collector and Backtest default to all instruments marked `active`. `--symbol` selects one instrument explicitly, including an inactive instrument. Symbols are case-insensitive. Both jobs continue processing other instruments after a failure and exit with a nonzero status if any instrument fails. Neither job starts the API server.
 
-Collector accepts optional inclusive `--from` and `--to` dates in `YYYY-MM-DD` format. Without dates it requests all history available from each configured proposition; imports upsert existing daily bars. After a nonempty import it saves analysis of the newest 1,000 stored bars and creates any regime-transition alert. The date options limit the import, not the analysis window. A zero-row import skips analysis. Collection runs once; use an external scheduler for recurring runs. Proposition access errors require resolving endpoint/credentials or adding another proposition.
+Collector accepts optional inclusive `--from` and `--to` dates in `YYYY-MM-DD` format. Without dates it requests all history available from each configured proposition; imports upsert existing daily bars. `--last-day` requests only the previous weekday on the America/New_York calendar, which at 7:30am Eastern is the latest completed session, and cannot be combined with `--from` or `--to`. After a nonempty import it saves analysis of the newest 1,000 stored bars and creates any regime-transition alert. The date options limit the import, not the analysis window. A zero-row import skips analysis. Collection runs once. Cloud Run schedules `--last-day` every morning at 7:30am Eastern. Proposition access errors require resolving endpoint/credentials or adding another proposition.
 
 Backtest reads stored bars without importing data or saving analyses or alerts. Import history first; results report observations and average next-bar returns by regime.
 
@@ -173,7 +174,7 @@ docker compose -f docker-compose.yml -f compose.app.yml up --build -d
 curl --fail http://localhost:8080/health
 ```
 
-The production image supports all four modes. Cloud Run uses an API service plus separate Collector and Backtest jobs, with a migration job applied before deployment. A push to `main` runs the same Cloud Build release. See [Docker and Cloud Run deployment](docs/cloud-run.md) for image commands, AlloyDB and Secret Manager setup, and the trigger. The API requires authenticated Cloud Run access by default. A request to the `*.run.app` URL without a Google identity token returns 403 before it reaches the application.
+The production image supports all four modes. Cloud Run uses an API service plus Collector, daily-bar, Backtest, and seed jobs, with a migration job applied before deployment. The daily-bar job runs at 7:30am Eastern. A push to `main` runs the same Cloud Build release. See [Docker and Cloud Run deployment](docs/cloud-run.md) for image commands, AlloyDB and Secret Manager setup, and the trigger. The API requires authenticated Cloud Run access by default. A request to the `*.run.app` URL without a Google identity token returns 403 before it reaches the application.
 
 Set `PROJECT_ID` and `REGION` to the Cloud Run service, then choose one of these setups before calling the API from Postman or another REST client. The caller account needs `roles/run.invoker` on the service.
 

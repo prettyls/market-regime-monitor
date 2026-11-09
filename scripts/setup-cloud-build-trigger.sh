@@ -34,9 +34,9 @@ fi
 
 command -v gcloud >/dev/null || { echo "Install the Google Cloud CLI first." >&2; exit 1; }
 
-echo "Enabling Cloud Run, Cloud Build, Artifact Registry, and Secret Manager"
+echo "Enabling Cloud Run, Cloud Build, Artifact Registry, Secret Manager, and Cloud Scheduler"
 gcloud services enable \
-  run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com secretmanager.googleapis.com \
+  run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com secretmanager.googleapis.com cloudscheduler.googleapis.com \
   --project="$PROJECT_ID"
 
 if ! gcloud artifacts repositories describe "$REPOSITORY" --location="$REGION" --project="$PROJECT_ID" >/dev/null 2>&1; then
@@ -93,6 +93,7 @@ grant_project_role() {
 grant_project_role roles/run.admin
 grant_project_role roles/logging.logWriter
 grant_project_role roles/artifactregistry.writer
+grant_project_role roles/cloudscheduler.admin
 
 # Let Cloud Build run the deployer, and let the deployer act as the runtime identity.
 service_agent="service-${project_number}@gcp-sa-cloudbuild.iam.gserviceaccount.com"
@@ -111,6 +112,16 @@ retry gcloud iam service-accounts add-iam-policy-binding "$runtime_sa" \
   --condition=None \
   --quiet >/dev/null
 echo "Granted roles/iam.serviceAccountUser on ${runtime_sa}"
+
+# Cloud Scheduler mints the OAuth token that executes the daily Cloud Run job.
+scheduler_agent="service-${project_number}@gcp-sa-cloudscheduler.iam.gserviceaccount.com"
+retry gcloud iam service-accounts add-iam-policy-binding "$runtime_sa" \
+  --project="$PROJECT_ID" \
+  --member="serviceAccount:${scheduler_agent}" \
+  --role=roles/iam.serviceAccountTokenCreator \
+  --condition=None \
+  --quiet >/dev/null
+echo "Granted roles/iam.serviceAccountTokenCreator on ${runtime_sa} to ${scheduler_agent}"
 
 if [[ "$DATABASE_SECRET" != "none" ]]; then
   if ! gcloud secrets describe "$DATABASE_SECRET" --project="$PROJECT_ID" >/dev/null 2>&1; then

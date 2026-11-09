@@ -2,7 +2,7 @@
 # Push Schwab tokens from .env onto Cloud Run.
 # Sets SCHWAB_ACCESS_TOKEN, SCHWAB_REFRESH_TOKEN, and the client id/secret the
 # process requires before it will start with a refresh token. Updates the API
-# service and any collect, backtest, and seed jobs that exist.
+# service and any collect, daily, backtest, and seed jobs that exist.
 # Does not rebuild the image. Cloud Build deploys with --update-env-vars and
 # --update-secrets, so tokens applied here remain on the next full deploy.
 #
@@ -122,7 +122,7 @@ update_args=(
   "$(env_update_arg "$client_secret_key" "$client_secret")"
 )
 
-job_names=("${SERVICE_NAME}-collect" "${SERVICE_NAME}-backtest" "${SERVICE_NAME}-seed")
+job_names=("${SERVICE_NAME}-collect" "${SERVICE_NAME}-daily" "${SERVICE_NAME}-backtest" "${SERVICE_NAME}-seed")
 
 if [[ "$DRY_RUN" -eq 1 ]]; then
   echo "Dry run. Would set SCHWAB_ACCESS_TOKEN (${#access_token} chars), SCHWAB_REFRESH_TOKEN (${#refresh_token} chars), ${client_id_key} (${#client_id} chars), and ${client_secret_key} (${#client_secret} chars) from ${ENV_FILE}."
