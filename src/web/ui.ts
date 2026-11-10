@@ -27,9 +27,17 @@ ${baseStyles}
   .empty { color: var(--muted); font-size: 14px; }
   .legend { display: flex; gap: 16px; font-size: 12px; color: var(--muted); }
   .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+  #token-bar { position: relative; height: 28px; background: #d1d5db; overflow: hidden; }
+  #token-bar[hidden] { display: none; }
+  #token-fill { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--muted); transition: width 1s linear, background-color 0.3s; }
+  #token-fill.ok { background: var(--normal); }
+  #token-fill.low { background: var(--warning); }
+  #token-fill.critical { background: var(--alert); }
+  #token-label { position: relative; display: block; line-height: 28px; text-align: center; font-size: 13px; font-weight: 600; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.5); }
 </style>
 </head>
 <body>
+<div id="token-bar" hidden role="progressbar" aria-label="Access token time remaining"><div id="token-fill"></div><span id="token-label"></span></div>
 <header><h1>Market Regime Monitor</h1><a href="/instruments/new">Add instrument</a></header>
 <main>
   <section>
@@ -89,13 +97,59 @@ ${baseStyles}
     return body;
   }
 
+  // Access token expiry countdown. The server reports expiresAt from the token response; the bar ticks locally between polls.
+  var tokenExpiry = null;
+  var tokenLifetimeMs = null;
+
+  function formatRemaining(ms) {
+    var total = Math.max(0, Math.floor(ms / 1000));
+    var h = Math.floor(total / 3600), m = Math.floor((total % 3600) / 60), s = total % 60;
+    var pad = function (n) { return n < 10 ? "0" + n : String(n); };
+    return (h ? h + ":" + pad(m) : m) + ":" + pad(s);
+  }
+
+  function paintTokenBar() {
+    var fill = $("token-fill"), label = $("token-label"), bar = $("token-bar");
+    if (tokenExpiry === null) {
+      fill.style.width = "0";
+      fill.className = "";
+      label.textContent = "Access token expiry unknown until the next token refresh";
+      label.style.color = "#111827";
+      label.style.textShadow = "none";
+      return;
+    }
+    label.style.color = "";
+    label.style.textShadow = "";
+    var remaining = tokenExpiry - Date.now();
+    var fraction = remaining > 0 && tokenLifetimeMs ? Math.min(1, remaining / tokenLifetimeMs) : 0;
+    fill.style.width = (remaining > 0 ? Math.max(fraction, 0.01) * 100 : 100) + "%";
+    fill.className = remaining <= 0 || fraction <= 0.1 ? "critical" : fraction <= 0.33 ? "low" : "ok";
+    label.textContent = remaining > 0
+      ? "Access token expires in " + formatRemaining(remaining) + " (" + new Date(tokenExpiry).toLocaleTimeString() + ")"
+      : "Access token expired" + " at " + new Date(tokenExpiry).toLocaleTimeString();
+    bar.setAttribute("aria-valuenow", String(Math.round(fraction * 100)));
+  }
+
+  async function refreshTokenStatus() {
+    try {
+      var status = await api("GET", "/api/v1/auth/token-status");
+      $("token-bar").hidden = !status.supported;
+      tokenExpiry = status.expiresAt ? new Date(status.expiresAt).getTime() : null;
+      tokenLifetimeMs = status.lifetimeSeconds ? status.lifetimeSeconds * 1000 : null;
+      paintTokenBar();
+    } catch (error) { /* keep the last known state; the next poll retries */ }
+  }
+
   async function run(label, action) {
     buttons.forEach(function (b) { b.disabled = true; });
     setMessage(label + "...");
     try { setMessage(await action()); }
     catch (error) { setMessage(label + " failed: " + error.message, true); }
-    finally { buttons.forEach(function (b) { b.disabled = false; }); }
+    finally { buttons.forEach(function (b) { b.disabled = false; }); refreshTokenStatus(); }
   }
+
+  setInterval(paintTokenBar, 1000);
+  setInterval(refreshTokenStatus, 30000);
 
   function table(headers, rows) {
     return el("table", {}, [

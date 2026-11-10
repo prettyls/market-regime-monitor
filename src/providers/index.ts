@@ -2,6 +2,7 @@ import { CharlesSchwabProvider, type SchwabProviderAuth } from "./charles-schwab
 import { StooqProvider } from "./stooq.js";
 import type { MarketDataProvider } from "./provider.js";
 import { PropositionMapping } from "./proposition-mapping.js";
+import { TokenExpiryTracker, type TokenStatus } from "./token-status.js";
 
 const readNonEmpty = (...values: Array<string | undefined>): string | undefined => {
   for (const value of values) {
@@ -13,7 +14,7 @@ const readNonEmpty = (...values: Array<string | undefined>): string | undefined 
 
 const isExampleValue = (value: string): boolean => /^YOUR_[A-Z0-9_]+$/.test(value);
 
-const resolveSchwabProviderAuthFromEnv = (): SchwabProviderAuth => {
+const resolveSchwabProviderAuthFromEnv = (tracker: TokenExpiryTracker): SchwabProviderAuth => {
   const accessToken = readNonEmpty(process.env.SCHWAB_ACCESS_TOKEN);
   if (!accessToken) {
     throw new Error(
@@ -50,6 +51,7 @@ const resolveSchwabProviderAuthFromEnv = (): SchwabProviderAuth => {
     ...(redirectUri ? { redirectUri } : {}),
     onTokenUpdate: (tokenData) => {
       process.env.SCHWAB_ACCESS_TOKEN = tokenData.accessToken;
+      tracker.record(tokenData.expiresAt);
       if (tokenData.refreshToken) process.env.SCHWAB_REFRESH_TOKEN = tokenData.refreshToken;
       else delete process.env.SCHWAB_REFRESH_TOKEN;
     },
@@ -59,6 +61,7 @@ const resolveSchwabProviderAuthFromEnv = (): SchwabProviderAuth => {
 
 export class ProviderRegistry {
   private readonly providers = new Map<string, MarketDataProvider>();
+  private tokenTracker = new TokenExpiryTracker(false);
   constructor(providers?: readonly MarketDataProvider[]) {
     const configuredProviders = providers ?? this.buildProviders();
     configuredProviders.forEach((provider) => this.providers.set(provider.name, provider));
@@ -67,13 +70,16 @@ export class ProviderRegistry {
   private buildProviders(): readonly MarketDataProvider[] {
     const proposition = new PropositionMapping().resolveFromEnv(process.env.DATA_PROVIDER);
     if (proposition.providerName === "charles_schwab") {
-      return [new CharlesSchwabProvider(resolveSchwabProviderAuthFromEnv())];
+      this.tokenTracker = new TokenExpiryTracker(true);
+      return [new CharlesSchwabProvider(resolveSchwabProviderAuthFromEnv(this.tokenTracker))];
     }
     if (proposition.providerName === "stooq") {
       return [new StooqProvider(fetch)];
     }
     throw new Error(`Unsupported provider mapping for proposition: ${proposition.proposition}`);
   }
+
+  tokenStatus(): TokenStatus { return this.tokenTracker.status(); }
 
   names(): string[] { return [...this.providers.keys()]; }
 
