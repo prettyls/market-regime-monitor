@@ -17,6 +17,7 @@ export function buildApp() {
   app.get("/", async (_request, reply) => reply.type("text/html; charset=utf-8").send(uiHtml));
   app.get("/instruments/new", async (_request, reply) => reply.type("text/html; charset=utf-8").send(newInstrumentPage));
   app.get("/health", async () => ({ status: "ok" }));
+  app.get("/api/v1/auth/token-status", async () => providers.tokenStatus());
   app.get("/api/v1/instruments", async () => prisma.instrument.findMany({ orderBy: { symbol: "asc" } }));
   app.post("/api/v1/instruments", async (request, reply) => reply.code(201).send(await service.addInstrument(instrumentInputSchema.parse(request.body))));
   app.post("/api/v1/instruments/:symbol/import", async (request) => { const { symbol } = request.params as { symbol: string }; const query = historyQuerySchema.parse(request.query); return { imported: await service.importHistory(symbol, query.from, query.to) }; });
