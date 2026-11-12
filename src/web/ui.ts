@@ -1,3 +1,4 @@
+import { financialGlossary } from "./glossary.js";
 import { baseStyles } from "./styles.js";
 
 // Served as a single self-contained page so the compiled build needs no static asset copy step.
@@ -10,6 +11,9 @@ const monitorHtml = (details: boolean) => `<!doctype html>
 <title>Market Regime Monitor</title>
 <style>
 ${baseStyles}
+  .disclaimer { color: var(--muted); font-size: 12px; line-height: 1.6; }
+  .financial-term { text-decoration: underline dotted; text-underline-offset: 3px; cursor: help; }
+  .financial-term:focus-visible { outline: 2px solid #2563eb; outline-offset: 3px; }
   .summary { display: flex; flex-wrap: wrap; gap: 24px; align-items: center; }
   .badge { padding: 10px 20px; border-radius: 999px; color: #fff; font-weight: 700; letter-spacing: 0.05em; }
   .badge.NORMAL { background: var(--normal); }
@@ -74,6 +78,9 @@ ${baseStyles}
     <h2>Recent alerts</h2>
     <div id="alerts" class="empty">No alerts.</div>
   </section>` : '<section><h2>Latest analysis results</h2><div id="results" class="table-scroll" aria-live="polite">Loading latest results...</div></section>'}
+  ${details ? "" : `<footer class="disclaimer" aria-label="Disclaimer">
+    <p>This Market Regime Monitor is for personal use and is provided under the MIT License. It is provided “as is”, without warranty of any kind. The information is for informational purposes only and does not constitute financial or investment advice. You are solely responsible for your investment decisions and assume all associated risks. The authors and contributors accept no liability for any losses or damages arising from its use.</p>
+  </footer>`}
 </main>
 <script>
 (function () {
@@ -85,6 +92,15 @@ ${baseStyles}
     var node = document.createElement(tag);
     Object.keys(props || {}).forEach(function (key) { node[key] = props[key]; });
     (children || []).forEach(function (child) { node.append(child); });
+    return node;
+  }
+  var glossary = ${JSON.stringify(financialGlossary)};
+  function term(value) {
+    var text = String(value);
+    var key = text.toLowerCase();
+    if (!Object.prototype.hasOwnProperty.call(glossary, key)) return text;
+    var node = el("span", { className: "financial-term", textContent: text, title: glossary[key], tabIndex: 0 });
+    node.setAttribute("aria-label", text + ": " + glossary[key]);
     return node;
   }
   function setMessage(text, isError) { $("message").textContent = text; $("message").className = isError ? "error" : ""; }
@@ -155,12 +171,12 @@ ${baseStyles}
 
   function table(headers, rows) {
     return el("table", {}, [
-      el("thead", {}, [el("tr", {}, headers.map(function (h) { return el("th", { textContent: h }); }))]),
+      el("thead", {}, [el("tr", {}, headers.map(function (h) { return el("th", {}, [term(h)]); }))]),
       el("tbody", {}, rows.map(function (cells) { return el("tr", {}, cells.map(function (c) { return el("td", {}, [c]); })); }))
     ]);
   }
 
-  function metric(name, value) { return el("div", { className: "metric" }, [el("span", { textContent: name }), el("span", { textContent: value })]); }
+  function metric(name, value) { return el("div", { className: "metric" }, [el("span", {}, [term(name)]), el("span", {}, [term(value)])]); }
 
   function render(analysis) {
     if (!analysis) {
@@ -172,7 +188,7 @@ ${baseStyles}
     }
     $("summary").className = "summary";
     $("summary").replaceChildren(
-      el("span", { className: "badge " + analysis.status, textContent: analysis.status }),
+      el("span", { className: "badge " + analysis.status, }, [term(analysis.status)]),
       metric("Regime", analysis.regime),
       metric("Score", fmt(analysis.score)),
       metric("Confidence", fmt(analysis.confidence) + "%"),
@@ -181,7 +197,7 @@ ${baseStyles}
     var signals = analysis.signals || [];
     $("signals").className = "";
     $("signals").replaceChildren(signals.length ? table(["Pattern", "State", "Score", "Confidence"], signals.map(function (s) {
-      return [s.pattern, s.state, fmt(s.score), fmt(s.confidence) + "%"];
+      return [term(s.pattern), term(s.state), fmt(s.score), fmt(s.confidence) + "%"];
     })) : "No signals.");
     var evidence = analysis.evidence || [];
     $("evidence").className = evidence.length ? "" : "empty";
@@ -194,7 +210,7 @@ ${baseStyles}
     var alerts = await api("GET", "/api/v1/alerts?limit=10&symbol=" + symbol());
     $("alerts").className = alerts.length ? "" : "empty";
     $("alerts").replaceChildren(alerts.length ? table(["Date", "Severity", "Transition", "Score"], alerts.map(function (a) {
-      return [date(a.timestamp), a.severity, (a.fromRegime || "unclassified") + " to " + a.toRegime, fmt(a.score)];
+      return [date(a.timestamp), term(a.severity), el("span", {}, [term(a.fromRegime || "unclassified"), " to ", term(a.toRegime)]), fmt(a.score)];
     })) : "No alerts.");
   }
 
@@ -232,7 +248,7 @@ ${baseStyles}
     if (!instruments.length) { $("results").replaceChildren("No instruments configured. Use Add instrument to create one."); return; }
     var rows = instruments.map(function (i) {
       var a = i.analysis;
-      return [el("a", { href: "/analysis?symbol=" + encodeURIComponent(i.symbol), textContent: i.symbol + " - " + i.name }), a ? a.status : "Not analyzed", a ? a.regime : "-", a ? fmt(a.score) : "-", a ? fmt(a.confidence) + "%" : "-", a ? date(a.timestamp) : "-"];
+      return [el("a", { href: "/analysis?symbol=" + encodeURIComponent(i.symbol), textContent: i.symbol + " - " + i.name }), a ? term(a.status) : "Not analyzed", a ? term(a.regime) : "-", a ? fmt(a.score) : "-", a ? fmt(a.confidence) + "%" : "-", a ? date(a.timestamp) : "-"];
     });
     $("results").replaceChildren(table(["Instrument", "Status", "Regime", "Score", "Confidence", "As of"], rows));
   }
