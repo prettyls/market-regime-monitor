@@ -30,8 +30,9 @@ export type AnalysisResult = Readonly<{
 }>;
 
 export type PatternConfig = Readonly<{
+  volume?: { enabled: boolean; lookback: number; lowRatio: number; highRatio: number } | undefined;
   range: { lookback: number; percentileLow: number; percentileHigh: number };
-  breakout: { lookback: number; confirmationBars: number; bufferPct: number };
+  breakout: { lookback: number; confirmationBars: number; bufferPct: number; atrPeriod?: number | undefined; atrMultiplier?: number | undefined };
   meanReversion: { lookback: number; zScoreEntry: number };
   trend: { fastPeriod: number; slowPeriod: number; slopePeriod: number };
 }>;

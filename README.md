@@ -214,3 +214,15 @@ The initial backtest intentionally reports observations and average next-bar ret
 Future confirmation data (VIX futures term structure, VVIX, related instruments) can be added as provider-fed series and consumed by a new `Strategy` implementation. A future web UI can consume the existing REST representation without changing analysis logic.
 
 Market data can be delayed or incomplete. This software is for research, not investment advice.
+
+## Volume and volatility confirmation
+
+Analysis now uses the selected regime's directional score (−100 to +100), rather than averaging conflicting detector scores. Regime priority is breakout, trend, mean reversion, then range. A stretched active trend retains its direction and includes a mean-reversion risk warning. Range scores are neutral. Confidence is heuristic signal strength, not a probability.
+
+Equities and ETFs use historical volume automatically. Latest-session volume and average volume across the breakout confirmation window are compared with the mean of the preceding 20 sessions, excluding the entire confirmation window. Confirmation ratios below 0.8× reduce directional signal strength by 10 points; ratios at or above 1.5× increase it by 10 points, bounded to 0–100. Missing, nonfinite, nonpositive, or insufficient volume leaves price analysis usable without an adjustment. Other instrument kinds, including spot VIX, display volume as not applicable; no proxy volume is silently substituted.
+
+Breakouts use the larger of the percentage buffer and 0.5 × Wilder ATR(14). ATR uses only bars preceding the confirmation window, including overnight gaps. If ATR history is insufficient, the percentage buffer remains active. Set `breakout.atrMultiplier` to zero to disable ATR buffering. Optional `volume` settings are `enabled`, `lookback`, `lowRatio`, and `highRatio`; existing configurations use the defaults described above.
+
+To avoid partial daily candles, live analysis and backtesting exclude the current UTC calendar date. This conservative policy also defers same-day post-close analysis until the next UTC date; provider session-completion metadata is not available. Historical bars should have consistent corporate-action adjustments for both price and volume.
+
+These are initial research thresholds. The existing backtest remains a next-session return summary; predictive improvement and calibrated accuracy have not been established. Previously persisted analyses retain their old results until recomputed.

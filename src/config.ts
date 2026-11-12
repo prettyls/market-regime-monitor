@@ -5,8 +5,9 @@ export const envSchema = z.object({ DATABASE_URL: z.string().min(1), PORT: z.coe
 export const env = () => envSchema.parse(process.env);
 
 export const defaultPatternConfig: PatternConfig = {
+  volume: { enabled: true, lookback: 20, lowRatio: 0.8, highRatio: 1.5 },
   range: { lookback: 60, percentileLow: 0.2, percentileHigh: 0.8 },
-  breakout: { lookback: 20, confirmationBars: 2, bufferPct: 0.005 },
+  breakout: { lookback: 20, confirmationBars: 2, bufferPct: 0.005, atrPeriod: 14, atrMultiplier: 0.5 },
   meanReversion: { lookback: 30, zScoreEntry: 2 },
   trend: { fastPeriod: 10, slowPeriod: 30, slopePeriod: 10 }
 };

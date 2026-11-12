@@ -1,8 +1,9 @@
 import { z } from "zod";
 
 const patternConfigSchema = z.object({
+  volume: z.object({ enabled: z.boolean(), lookback: z.number().int().min(2), lowRatio: z.number().positive(), highRatio: z.number().positive() }).refine((v) => v.lowRatio < v.highRatio).optional(),
   range: z.object({ lookback: z.number().int().min(5), percentileLow: z.number().min(0).max(1), percentileHigh: z.number().min(0).max(1) }).refine((v) => v.percentileLow < v.percentileHigh),
-  breakout: z.object({ lookback: z.number().int().min(2), confirmationBars: z.number().int().min(1), bufferPct: z.number().min(0).max(1) }),
+  breakout: z.object({ lookback: z.number().int().min(2), confirmationBars: z.number().int().min(1), bufferPct: z.number().min(0).max(1), atrPeriod: z.number().int().min(2).optional(), atrMultiplier: z.number().min(0).max(10).optional() }),
   meanReversion: z.object({ lookback: z.number().int().min(5), zScoreEntry: z.number().positive() }),
   trend: z.object({ fastPeriod: z.number().int().positive(), slowPeriod: z.number().int().positive(), slopePeriod: z.number().int().min(2) }).refine((v) => v.fastPeriod < v.slowPeriod)
 });

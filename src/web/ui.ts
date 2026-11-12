@@ -191,13 +191,13 @@ ${baseStyles}
       el("span", { className: "badge " + analysis.status, }, [term(analysis.status)]),
       metric("Regime", analysis.regime),
       metric("Score", fmt(analysis.score)),
-      metric("Confidence", fmt(analysis.confidence) + "%"),
+      metric("Signal strength", fmt(analysis.confidence) + "%"),
       metric("As of", date(analysis.timestamp))
     );
     var signals = analysis.signals || [];
     $("signals").className = "";
-    $("signals").replaceChildren(signals.length ? table(["Pattern", "State", "Score", "Confidence"], signals.map(function (s) {
-      return [term(s.pattern), term(s.state), fmt(s.score), fmt(s.confidence) + "%"];
+    $("signals").replaceChildren(signals.length ? table(["Pattern", "State", "Score", "Strength", "Volume vs baseline", "ATR"], signals.map(function (s) {
+      return [term(s.pattern), term(s.state), fmt(s.score), s.pattern === "volume" ? "—" : fmt(s.confidence) + "%", s.metrics && s.metrics.relativeVolume !== undefined ? fmt(s.metrics.relativeVolume) + "× latest / " + fmt(s.metrics.confirmationRatio) + "× confirmation" : "—", s.metrics && s.metrics.atr !== undefined ? fmt(s.metrics.atr) : "—"];
     })) : "No signals.");
     var evidence = analysis.evidence || [];
     $("evidence").className = evidence.length ? "" : "empty";
@@ -250,7 +250,7 @@ ${baseStyles}
       var a = i.analysis;
       return [el("a", { href: "/analysis?symbol=" + encodeURIComponent(i.symbol), textContent: i.symbol + " - " + i.name }), a ? term(a.status) : "Not analyzed", a ? term(a.regime) : "-", a ? fmt(a.score) : "-", a ? fmt(a.confidence) + "%" : "-", a ? date(a.timestamp) : "-"];
     });
-    $("results").replaceChildren(table(["Instrument", "Status", "Regime", "Score", "Confidence", "As of"], rows));
+    $("results").replaceChildren(table(["Instrument", "Status", "Regime", "Score", "Signal strength", "As of"], rows));
   }
 
   run("Loading instruments", async function () {
