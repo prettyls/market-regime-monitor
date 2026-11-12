@@ -37,12 +37,12 @@ describe("landing page flow", () => {
 
   it("loads all latest results and navigates after a successful analysis", async () => {
     const nodes = new Map<string, any>();
-    const node = () => ({ value: "SPY", children: [] as any[], style: {}, append(child: any) { this.children.push(child); }, replaceChildren(...children: any[]) { this.children = children; } });
+    const node = () => ({ value: "SPY", children: [] as any[], style: {}, setAttribute(key: string, value: string) { (this as any)[key] = value; }, append(child: any) { this.children.push(child); }, replaceChildren(...children: any[]) { this.children = children; } });
     for (const id of ["import", "analyze", "latest", "message", "symbol", "results", "token-bar", "token-fill", "token-label", "from", "to"]) nodes.set(id, node());
     const location = { search: "", href: "" };
     const fetch = vi.fn(async (path: string) => ({ ok: true, status: 200, json: async () => {
       if (path === "/api/v1/instruments") return [{ symbol: "SPY", name: "S&P 500" }];
-      if (path === "/api/v1/analyses/latest") return [{ symbol: "SPY", name: "S&P 500", analysis: null }];
+      if (path === "/api/v1/analyses/latest") return [{ symbol: "SPY", name: "S&P 500", analysis: { status: "NORMAL", regime: "MEAN_REVERSION", score: 12, confidence: 65, timestamp: "2026-11-12" } }];
       return {};
     } }));
     runInNewContext(uiHtml.match(/<script>([\s\S]*?)<\/script>/)![1]!, {
@@ -50,6 +50,13 @@ describe("landing page flow", () => {
       location, fetch, URLSearchParams, setInterval: () => 0,
     });
     await vi.waitFor(() => expect(fetch).toHaveBeenCalledWith("/api/v1/analyses/latest", { method: "GET" }));
+    await vi.waitFor(() => expect(nodes.get("results").children).toHaveLength(1));
+    const table = nodes.get("results").children[0];
+    const regime = table.children[1].children[0].children[2].children[0];
+    expect(regime.textContent).toBe("MEAN_REVERSION");
+    expect(regime.title).toContain("recent average");
+    expect(regime.tabIndex).toBe(0);
+    expect(regime["aria-label"]).toContain(regime.title);
     nodes.get("analyze").onclick();
     await vi.waitFor(() => expect(location.href).toBe("/analysis?symbol=SPY"));
     expect(fetch).toHaveBeenCalledWith("/api/v1/instruments/SPY/analyze", { method: "POST" });
