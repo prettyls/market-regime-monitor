@@ -11,6 +11,7 @@ const monitorHtml = (details: boolean) => `<!doctype html>
 <title>Market Regime Monitor</title>
 <style>
 ${baseStyles}
+  .disclaimer { color: var(--muted); font-size: 12px; line-height: 1.6; }
   .financial-term { text-decoration: underline dotted; text-underline-offset: 3px; cursor: help; }
   .financial-term:focus-visible { outline: 2px solid #2563eb; outline-offset: 3px; }
   .summary { display: flex; flex-wrap: wrap; gap: 24px; align-items: center; }
@@ -77,6 +78,9 @@ ${baseStyles}
     <h2>Recent alerts</h2>
     <div id="alerts" class="empty">No alerts.</div>
   </section>` : '<section><h2>Latest analysis results</h2><div id="results" class="table-scroll" aria-live="polite">Loading latest results...</div></section>'}
+  ${details ? "" : `<footer class="disclaimer" aria-label="Disclaimer">
+    <p>This Market Regime Monitor is for personal use and is provided under the MIT License. It is provided “as is”, without warranty of any kind. The information is for informational purposes only and does not constitute financial or investment advice. You are solely responsible for your investment decisions and assume all associated risks. The authors and contributors accept no liability for any losses or damages arising from its use.</p>
+  </footer>`}
 </main>
 <script>
 (function () {
