@@ -6,7 +6,7 @@ import { ProviderRegistry } from "./providers/index.js";
 import { alertQuerySchema, historyQuerySchema, instrumentInputSchema, priceHistoryQuerySchema } from "./schemas.js";
 import { MarketService } from "./services.js";
 import { newInstrumentHtml } from "./web/new-instrument.js";
-import { uiHtml } from "./web/ui.js";
+import { analysisHtml, uiHtml } from "./web/ui.js";
 
 export function buildApp() {
   const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? "info", ...(process.env.NODE_ENV === "production" ? {} : { transport: { target: "pino-pretty" } }) } });
@@ -15,6 +15,14 @@ export function buildApp() {
   const service = new MarketService(prisma, providers, app.log);
   const newInstrumentPage = newInstrumentHtml(providers.names());
   app.get("/", async (_request, reply) => reply.type("text/html; charset=utf-8").send(uiHtml));
+  app.get("/analysis", async (_request, reply) => reply.type("text/html; charset=utf-8").send(analysisHtml));
+  app.get("/api/v1/analyses/latest", async () => {
+    const instruments = await prisma.instrument.findMany({
+      orderBy: { symbol: "asc" },
+      include: { analyses: { orderBy: { timestamp: "desc" }, take: 1 } },
+    });
+    return instruments.map(({ analyses, symbol, name }) => ({ symbol, name, analysis: analyses[0] ? withStatus(analyses[0]) : null }));
+  });
   app.get("/instruments/new", async (_request, reply) => reply.type("text/html; charset=utf-8").send(newInstrumentPage));
   app.get("/health", async () => ({ status: "ok" }));
   app.get("/api/v1/auth/token-status", async () => providers.tokenStatus());
