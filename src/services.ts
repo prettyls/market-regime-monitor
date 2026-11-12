@@ -39,11 +39,15 @@ export class MarketService {
 
   async analyze(symbol: string): Promise<AnalysisResult> {
     const instrument = await this.requireInstrument(symbol);
-    const rows = await this.db.marketBar.findMany({ where: { instrumentId: instrument.id, interval: "1d" }, orderBy: { timestamp: "desc" }, take: 1000 });
+    // Daily analysis deliberately excludes the current UTC date: providers
+    // may return unfinished candles and do not expose a completion flag.
+    const now = new Date();
+    const cutoff = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const rows = await this.db.marketBar.findMany({ where: { instrumentId: instrument.id, interval: "1d", timestamp: { lt: cutoff } }, orderBy: { timestamp: "desc" }, take: 1000 });
     // Select the newest window, then restore the chronological order detectors expect.
     rows.reverse();
     const bars: Bar[] = rows.map((row) => ({ timestamp: row.timestamp, open: row.open, high: row.high, low: row.low, close: row.close, ...(row.volume === null ? {} : { volume: row.volume }) }));
-    const result = this.strategy.analyze(bars, instrument.config as unknown as PatternConfig);
+    const result = this.strategy.analyze(bars, this.analysisConfig(instrument));
     const previous = await this.db.analysis.findFirst({ where: { instrumentId: instrument.id }, orderBy: { timestamp: "desc" } });
     await this.db.analysis.upsert({ where: { instrumentId_timestamp: { instrumentId: instrument.id, timestamp: result.timestamp } }, create: { instrumentId: instrument.id, timestamp: result.timestamp, regime: result.regime, score: result.score, confidence: result.confidence, evidence: result.evidence as unknown as Prisma.InputJsonValue, signals: result.signals as unknown as Prisma.InputJsonValue }, update: { regime: result.regime, score: result.score, confidence: result.confidence, evidence: result.evidence as unknown as Prisma.InputJsonValue, signals: result.signals as unknown as Prisma.InputJsonValue } });
     if (result.regime !== "INSUFFICIENT_DATA" && result.regime !== previous?.regime) await this.emitTransitionAlert(instrument.id, symbol, previous?.regime, result);
@@ -59,10 +63,10 @@ export class MarketService {
 
   async backtest(symbol: string) {
     const instrument = await this.requireInstrument(symbol);
-    const rows = await this.db.marketBar.findMany({ where: { instrumentId: instrument.id }, orderBy: { timestamp: "asc" } });
+    const rows = await this.db.marketBar.findMany({ where: { instrumentId: instrument.id, interval: "1d", timestamp: { lt: new Date(new Date().toISOString().slice(0, 10)) } }, orderBy: { timestamp: "asc" } });
     const bars = rows.map((row) => ({ timestamp: row.timestamp, open: row.open, high: row.high, low: row.low, close: row.close, ...(row.volume === null ? {} : { volume: row.volume }) }));
-    const config = instrument.config as unknown as PatternConfig;
-    const minBars = Math.max(config.range.lookback, config.breakout.lookback + config.breakout.confirmationBars, config.meanReversion.lookback, config.trend.slowPeriod);
+    const config = this.analysisConfig(instrument);
+    const minBars = Math.max(config.range.lookback, config.breakout.lookback + config.breakout.confirmationBars, config.meanReversion.lookback, config.trend.slowPeriod, config.trend.slopePeriod);
     const observations = [];
     for (let i = minBars; i < bars.length - 1; i++) {
       const analysis = this.strategy.analyze(bars.slice(0, i + 1), config);
@@ -73,6 +77,12 @@ export class MarketService {
     for (const item of observations) grouped.set(item.regime, [...(grouped.get(item.regime) ?? []), item]);
     const byRegime = [...grouped].map(([regime, items]) => ({ regime, observations: items.length, averageNextReturn: items.reduce((sum, item) => sum + item.nextReturn, 0) / items.length }));
     return { symbol, observations: observations.length, byRegime };
+  }
+
+  private analysisConfig(instrument: { config: unknown; kind: string }): PatternConfig {
+    const config = instrument.config as PatternConfig;
+    const volume = config.volume ?? { enabled: true, lookback: 20, lowRatio: 0.8, highRatio: 1.5 };
+    return { ...config, volume: { ...volume, enabled: volume.enabled && ["ETF", "EQUITY"].includes(instrument.kind) } };
   }
 
   private async requireInstrument(symbol: string) { const instrument = await this.db.instrument.findUnique({ where: { symbol: symbol.toUpperCase() } }); if (!instrument) throw new Error(`Instrument ${symbol} not found`); return instrument; }

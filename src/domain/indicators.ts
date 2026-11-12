@@ -1,3 +1,5 @@
+import type { Bar } from "./types.js";
+
 export function mean(values: readonly number[]): number {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
@@ -45,4 +47,14 @@ export function linearSlope(values: readonly number[]): number {
 
 export function clamp(value: number, min = 0, max = 100): number {
   return Math.min(max, Math.max(min, value));
+}
+
+// Wilder ATR, including gaps. Call with reference bars only to avoid
+// allowing the breakout itself to inflate its confirmation threshold.
+export function atr(bars: readonly Bar[], period: number): number | undefined {
+  if (period < 1 || bars.length < period + 1) return undefined;
+  const ranges = bars.slice(1).map((bar, i) => Math.max(bar.high - bar.low, Math.abs(bar.high - bars[i]!.close), Math.abs(bar.low - bars[i]!.close)));
+  let value = mean(ranges.slice(0, period));
+  for (const range of ranges.slice(period)) value = (value * (period - 1) + range) / period;
+  return value;
 }

@@ -11,7 +11,7 @@ it.each([50, 1725])("analyzes and saves the latest bar with %i stored bars", asy
     open: 20, high: 22, low: 18, close: 20, volume: null
   }));
   const db = {
-    instrument: { findUnique: vi.fn().mockResolvedValue({ id: "vix", config: defaultPatternConfig }) },
+    instrument: { findUnique: vi.fn().mockResolvedValue({ id: "vix", kind: "INDEX", config: defaultPatternConfig }) },
     marketBar: {
       findMany: vi.fn(async ({ orderBy, take }: { orderBy: { timestamp: string }; take: number }) => {
         const sorted = [...stored].sort((a, b) => orderBy.timestamp === "desc"
@@ -31,6 +31,8 @@ it.each([50, 1725])("analyzes and saves the latest bar with %i stored bars", asy
 
   const input = analyze.mock.calls[0]![0];
   expect(input.map((bar) => bar.timestamp)).toEqual(stored.slice(-1000).map((bar) => bar.timestamp));
+  expect(analyze.mock.calls[0]![1].volume?.enabled).toBe(false);
+  expect(db.marketBar.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ interval: "1d", timestamp: { lt: expect.any(Date) } }) }));
   expect(result.timestamp).toEqual(stored.at(-1)!.timestamp);
   expect(db.analysis.upsert).toHaveBeenCalledWith(expect.objectContaining({
     where: { instrumentId_timestamp: { instrumentId: "vix", timestamp: stored.at(-1)!.timestamp } },
