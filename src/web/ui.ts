@@ -2,7 +2,7 @@ import { baseStyles } from "./styles.js";
 
 // Served as a single self-contained page so the compiled build needs no static asset copy step.
 // The inline script must avoid template literals: this whole document is a TypeScript template string.
-export const uiHtml = `<!doctype html>
+const monitorHtml = (details: boolean) => `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -18,6 +18,7 @@ ${baseStyles}
   .metric { display: grid; gap: 2px; }
   .metric span:first-child { font-size: 12px; color: var(--muted); }
   .metric span:last-child { font-size: 18px; font-weight: 600; }
+  .table-scroll { overflow-x: auto; }
   table { width: 100%; border-collapse: collapse; font-size: 14px; }
   th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--border); }
   th { color: var(--muted); font-weight: 500; }
@@ -38,9 +39,9 @@ ${baseStyles}
 </head>
 <body>
 <div id="token-bar" hidden role="progressbar" aria-label="Access token time remaining"><div id="token-fill"></div><span id="token-label"></span></div>
-<header><h1>Market Regime Monitor</h1><a href="/instruments/new">Add instrument</a></header>
+<header><h1>Market Regime Monitor</h1>${details ? '<a href="/">Back to monitor</a>' : '<a href="/instruments/new">Add instrument</a>'}</header>
 <main>
-  <section>
+  ${details ? '<section><h2 id="instrument-heading">Analysis details</h2><p id="message"></p><select id="symbol" hidden></select></section>' : `<section>
     <h2>Run</h2>
     <div class="controls">
       <label>Instrument <select id="symbol"></select></label>
@@ -51,8 +52,8 @@ ${baseStyles}
       <button id="latest" class="secondary">Load latest</button>
     </div>
     <p id="message"></p>
-  </section>
-  <section>
+  </section>`}
+  ${details ? `<section>
     <h2>Analysis result</h2>
     <div id="summary" class="empty">No analysis loaded.</div>
     <div class="legend" style="margin-top:12px">
@@ -72,12 +73,13 @@ ${baseStyles}
   <section>
     <h2>Recent alerts</h2>
     <div id="alerts" class="empty">No alerts.</div>
-  </section>
+  </section>` : '<section><h2>Latest analysis results</h2><div id="results" class="table-scroll" aria-live="polite">Loading latest results...</div></section>'}
 </main>
 <script>
 (function () {
   var $ = function (id) { return document.getElementById(id); };
-  var buttons = ["import", "analyze", "latest"].map($);
+  var details = ${details};
+  var buttons = ["import", "analyze", "latest"].map($).filter(Boolean);
 
   function el(tag, props, children) {
     var node = document.createElement(tag);
@@ -154,7 +156,7 @@ ${baseStyles}
   function table(headers, rows) {
     return el("table", {}, [
       el("thead", {}, [el("tr", {}, headers.map(function (h) { return el("th", { textContent: h }); }))]),
-      el("tbody", {}, rows.map(function (cells) { return el("tr", {}, cells.map(function (c) { return el("td", { textContent: c }); })); }))
+      el("tbody", {}, rows.map(function (cells) { return el("tr", {}, cells.map(function (c) { return el("td", {}, [c]); })); }))
     ]);
   }
 
@@ -203,6 +205,7 @@ ${baseStyles}
     return analysis ? "Loaded latest analysis." : "No stored analysis for this instrument.";
   }
 
+  if (!details) {
   $("import").onclick = function () {
     run("Importing", async function () {
       var params = new URLSearchParams();
@@ -215,24 +218,44 @@ ${baseStyles}
   };
   $("analyze").onclick = function () {
     run("Analyzing", async function () {
-      render(await api("POST", "/api/v1/instruments/" + symbol() + "/analyze"));
-      await loadAlerts();
+      var selected = symbol();
+      await api("POST", "/api/v1/instruments/" + selected + "/analyze");
+      location.href = "/analysis?symbol=" + selected;
       return "Analysis complete.";
     });
   };
-  $("latest").onclick = function () { run("Loading", loadLatest); };
-  $("symbol").onchange = function () { run("Loading", loadLatest); };
+  $("latest").onclick = function () { location.href = "/analysis?symbol=" + symbol(); };
+  }
+
+  async function loadResults() {
+    var instruments = await api("GET", "/api/v1/analyses/latest");
+    if (!instruments.length) { $("results").replaceChildren("No instruments configured. Use Add instrument to create one."); return; }
+    var rows = instruments.map(function (i) {
+      var a = i.analysis;
+      return [el("a", { href: "/analysis?symbol=" + encodeURIComponent(i.symbol), textContent: i.symbol + " - " + i.name }), a ? a.status : "Not analyzed", a ? a.regime : "-", a ? fmt(a.score) : "-", a ? fmt(a.confidence) + "%" : "-", a ? date(a.timestamp) : "-"];
+    });
+    $("results").replaceChildren(table(["Instrument", "Status", "Regime", "Score", "Confidence", "As of"], rows));
+  }
 
   run("Loading instruments", async function () {
     var instruments = await api("GET", "/api/v1/instruments");
     $("symbol").replaceChildren.apply($("symbol"), instruments.map(function (i) { return el("option", { value: i.symbol, textContent: i.symbol + " - " + i.name }); }));
-    if (!instruments.length) return "No instruments configured. Use Add instrument to create one.";
+    if (!instruments.length) { if (!details) await loadResults(); buttons.forEach(function (b) { b.hidden = true; }); return "No instruments configured. Use Add instrument to create one."; }
     var requested = new URLSearchParams(location.search).get("symbol");
     if (requested && instruments.some(function (i) { return i.symbol === requested.toUpperCase(); })) $("symbol").value = requested.toUpperCase();
-    return loadLatest();
+    if (details) {
+      if (!requested || !instruments.some(function (i) { return i.symbol === requested.toUpperCase(); })) throw new Error("Select an instrument from the landing page.");
+      $("instrument-heading").textContent = $("symbol").selectedOptions[0].textContent + " — Analysis details";
+      return loadLatest();
+    }
+    await loadResults();
+    return "Select an instrument to run analysis or open a result below.";
   });
 })();
 </script>
 </body>
 </html>
 `;
+
+export const uiHtml = monitorHtml(false);
+export const analysisHtml = monitorHtml(true);
