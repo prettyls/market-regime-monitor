@@ -1,7 +1,7 @@
 import { Script, runInNewContext } from "node:vm";
 import { describe, expect, it, vi } from "vitest";
 import { newInstrumentHtml } from "../src/web/new-instrument.js";
-import { analysisHtml, uiHtml } from "../src/web/ui.js";
+import { analysisHtml, adminHtml as uiHtml, uiHtml as publicHtml } from "../src/web/ui.js";
 
 describe("web ui", () => {
   it("offers only the configured providers on the add instrument page", () => {
@@ -71,3 +71,9 @@ describe("landing page flow", () => {
     expect(fetch).toHaveBeenCalledWith("/api/v1/instruments/SPY/analyze", { method: "POST" });
   });
 });
+
+ it("keeps the public page read only", () => {
+   expect(publicHtml).not.toContain('id="import"');
+   expect(publicHtml).not.toContain('id="analyze"');
+   expect(publicHtml).toContain('href="/admin"');
+ });

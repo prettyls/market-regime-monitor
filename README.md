@@ -190,9 +190,9 @@ docker compose -f docker-compose.yml -f compose.app.yml up --build -d
 curl --fail http://localhost:8080/health
 ```
 
-The production image supports all four modes. Cloud Run uses an API service plus Collector, daily-bar, Backtest, and seed jobs, with a migration job applied before deployment. The daily-bar job runs at 7:30am Eastern. A push to `main` runs the same Cloud Build release. See [Docker and Cloud Run deployment](docs/cloud-run.md) for image commands, AlloyDB and Secret Manager setup, and the trigger. The API requires authenticated Cloud Run access by default. A request to the `*.run.app` URL without a Google identity token returns 403 before it reaches the application.
+The production image supports all four modes. Cloud Run uses an API service plus Collector, daily-bar, Backtest, and seed jobs, with a migration job applied before deployment. The daily-bar job runs at 7:30am Eastern. A push to `main` runs the same Cloud Build release. See [Docker and Cloud Run deployment](docs/cloud-run.md) for image commands, AlloyDB and Secret Manager setup, and the trigger. New deployments allow public Cloud Run access. The landing page and saved individual analyses are public; `/admin`, instrument creation, imports, analysis execution, downloads and backtests require application administrator credentials. See the public access setup in [the deployment guide](docs/cloud-run.md#public-access-and-administrator-login). Existing deployments keep their current access settings until redeployed.
 
-Set `PROJECT_ID` and `REGION` to the Cloud Run service, then choose one of these setups before calling the API from Postman or another REST client. The caller account needs `roles/run.invoker` on the service.
+For an older deployment that still requires Cloud Run IAM authentication, set `PROJECT_ID` and `REGION`, then use one of these setups. The caller needs `roles/run.invoker`. IAM credentials do not replace the application admin login for protected routes.
 
 Proxy the service to localhost. Leave this process running, and point the client at `http://localhost:8081`. The proxy attaches your gcloud credentials, so the client sends no auth header.
 

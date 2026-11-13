@@ -67,7 +67,7 @@ gcloud run deploy "${_SERVICE_NAME}" \
   --service-account="$service_account" \
   --execution-environment=gen2 \
   --port=8080 \
-  --no-allow-unauthenticated \
+  --allow-unauthenticated \
   "${network_args[@]}" \
   "${secret_args[@]}" \
   --update-env-vars=NODE_ENV=production,HOST=0.0.0.0,LOG_LEVEL=info \

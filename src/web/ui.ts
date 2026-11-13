@@ -3,7 +3,7 @@ import { baseStyles } from "./styles.js";
 
 // Served as a single self-contained page so the compiled build needs no static asset copy step.
 // The inline script must avoid template literals: this whole document is a TypeScript template string.
-const monitorHtml = (details: boolean) => `<!doctype html>
+const monitorHtml = (details: boolean, admin = false) => `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -50,16 +50,16 @@ ${baseStyles}
 </head>
 <body>
 <div id="token-bar" hidden role="progressbar" aria-label="Access token time remaining"><div id="token-fill"></div><span id="token-label"></span></div>
-<header><h1>Market Regime Monitor</h1>${details ? '<a href="/">Back to monitor</a>' : '<a href="/instruments/new">Add instrument</a>'}</header>
+<header><h1>Market Regime Monitor</h1>${details ? '<a href="/">Back to monitor</a>' : admin ? '<a href="/instruments/new">Add instrument</a>' : '<a href="/admin">Admin</a>'}</header>
 <main>
   ${details ? '<section><h2 id="instrument-heading">Analysis details</h2><p id="message"></p><select id="symbol" hidden></select></section>' : `<section>
-    <h2>Run</h2>
+    <h2>${admin ? "Run" : "Browse analyses"}</h2>
     <div class="controls">
       <label>Instrument <select id="symbol"></select></label>
-      <label>From <input type="date" id="from"></label>
+      ${admin ? `<label>From <input type="date" id="from"></label>
       <label>To <input type="date" id="to"></label>
       <button id="import" class="secondary">Import data</button>
-      <button id="analyze">Run analysis</button>
+      <button id="analyze">Run analysis</button>` : ""}
       <button id="latest" class="secondary">Load latest</button>
     </div>
     <p id="message"></p>
@@ -170,11 +170,10 @@ ${baseStyles}
     setMessage(label + "...");
     try { setMessage(await action()); }
     catch (error) { setMessage(label + " failed: " + error.message, true); }
-    finally { buttons.forEach(function (b) { b.disabled = false; }); refreshTokenStatus(); }
+    finally { buttons.forEach(function (b) { b.disabled = false; }); if (${admin}) refreshTokenStatus(); }
   }
 
-  setInterval(paintTokenBar, 1000);
-  setInterval(refreshTokenStatus, 30000);
+  if (${admin}) { setInterval(paintTokenBar, 1000); setInterval(refreshTokenStatus, 30000); }
 
   function table(headers, rows) {
     return el("table", {}, [
@@ -229,6 +228,7 @@ ${baseStyles}
   }
 
   if (!details) {
+  if (${admin}) {
   $("import").onclick = function () {
     run("Importing", async function () {
       var params = new URLSearchParams();
@@ -247,6 +247,7 @@ ${baseStyles}
       return "Analysis complete.";
     });
   };
+  }
   $("latest").onclick = function () { location.href = "/analysis?symbol=" + symbol(); };
   }
 
@@ -286,4 +287,5 @@ ${baseStyles}
 `;
 
 export const uiHtml = monitorHtml(false);
+export const adminHtml = monitorHtml(false, true);
 export const analysisHtml = monitorHtml(true);
