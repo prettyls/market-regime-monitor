@@ -137,3 +137,29 @@ To roll back application code, send traffic to the previous Cloud Run revision a
 - [Cloud Run job deployment flags](https://docs.cloud.google.com/sdk/gcloud/reference/run/jobs/deploy)
 - [Cloud Build triggers](https://cloud.google.com/build/docs/automating-builds/create-manage-triggers)
 - [Cloud Build GitHub connection](https://cloud.google.com/build/docs/automating-builds/github/connect-repo-github)
+
+## Public access and administrator login
+
+The deploy script now uses `--allow-unauthenticated`. Cloud Run's public access setting applies to the service; the application enforces route permissions. Deploy the new application before opening an older revision to public access.
+
+- Public: `/`, `/analysis?symbol=SPY`, `/health`, and GET/HEAD requests for instrument names, latest results, saved individual analysis and alerts.
+- Administrator: `/admin`, `/instruments/new`, instrument creation, imports, analysis execution, history downloads, data, signals, backtests and provider token status.
+- Agent endpoints retain their separate scoped bearer authentication.
+
+Visit `/admin` or `/instruments/new` to use the browser's Basic login prompt. The default username is `admin`; override with `ADMIN_USERNAME`. Set `ADMIN_PASSWORD` to a unique random value of at least 32 characters. Missing passwords disable administrator access; short passwords prevent startup. Use HTTPS; browser Basic credentials persist until cleared or the browser session ends. Cross-origin writes are rejected. Never put the password in a URL or frontend code.
+
+Create a Secret Manager secret named `market-regime-admin-password` containing your generated password, without a trailing newline, and grant the runtime service account `roles/secretmanager.secretAccessor` on that secret, as with the database secret above. Bind it to the API service:
+
+```bash
+gcloud run services update market-regime-monitor \
+  --project="$PROJECT_ID" --region="$REGION" \
+  --update-secrets=ADMIN_PASSWORD=market-regime-admin-password:latest
+```
+
+The deploy script preserves this existing secret binding. Jobs do not need the admin password. REST clients use HTTP Basic authentication for admin operations; Google identity tokens do not authorize these operations.
+
+Public pages read saved results and do not trigger provider downloads or analysis computation. Scheduled collection continues to refresh results. Successful public JSON reads are cached per instance for 15 seconds, up to 128 entries of 256 KiB each; writes clear the local cache. Other instances may show older results for up to 15 seconds. The public instrument list exposes only symbol, name and kind. Provider token polling runs only on the admin page.
+
+The existing service limits remain 1 CPU, 512 MiB, concurrency 20, and maximum 3 instances. This cache reduces repeat database reads; it is not a rate limiter or DDoS protection. If public traffic exhausts resources, measure latency and memory, then tune concurrency and consider a load balancer with Cloud Armor rate limiting. Maximum instances limits scaling, not a strict spending cap.
+
+References: [Cloud Run public access](https://docs.cloud.google.com/run/docs/authenticating/public), [concurrency](https://docs.cloud.google.com/run/docs/about-concurrency), [maximum instance limits](https://docs.cloud.google.com/run/docs/configuring/max-instances-limits).
