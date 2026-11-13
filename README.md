@@ -226,3 +226,11 @@ Breakouts use the larger of the percentage buffer and 0.5 × Wilder ATR(14). ATR
 To avoid partial daily candles, live analysis and backtesting exclude the current UTC calendar date. This conservative policy also defers same-day post-close analysis until the next UTC date; provider session-completion metadata is not available. Historical bars should have consistent corporate-action adjustments for both price and volume.
 
 These are initial research thresholds. The existing backtest remains a next-session return summary; predictive improvement and calibrated accuracy have not been established. Previously persisted analyses retain their old results until recomputed.
+
+## Agent proposals and Schwab portfolio access
+
+The first agent-trading milestone adds scoped bearer authentication, read-only
+Schwab accounts/orders, immutable proposal snapshots, policy checks, shared daily
+simulation limits, and audit events. It performs **simulation only** and never
+submits broker orders. Access is disabled until configured. Apply the new Prisma
+migration before use. See [agent trading setup and API](docs/agent-trading.md).

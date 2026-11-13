@@ -1,3 +1,4 @@
+import { registerTradingRoutes } from "./trading/routes.js";
 import sensible from "@fastify/sensible";
 import Fastify, { type FastifyError } from "fastify";
 import { prisma } from "./db.js";
@@ -9,8 +10,9 @@ import { newInstrumentHtml } from "./web/new-instrument.js";
 import { analysisHtml, uiHtml } from "./web/ui.js";
 
 export function buildApp() {
-  const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? "info", ...(process.env.NODE_ENV === "production" ? {} : { transport: { target: "pino-pretty" } }) } });
+  const app = Fastify({ logger: { redact: ["req.headers.authorization"], level: process.env.LOG_LEVEL ?? "info", ...(process.env.NODE_ENV === "production" ? {} : { transport: { target: "pino-pretty" } }) } });
   void app.register(sensible);
+  registerTradingRoutes(app, prisma);
   const providers = new ProviderRegistry();
   const service = new MarketService(prisma, providers, app.log);
   const newInstrumentPage = newInstrumentHtml(providers.names());

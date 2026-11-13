@@ -89,3 +89,33 @@ enum AlertSeverity {
   WARNING
   CRITICAL
 }
+
+model TradeProposal {
+  id             String   @id @default(cuid())
+  agentId        String
+  idempotencyKey String
+  requestHash    String
+  status         String
+  symbol         String
+  quantity       Int
+  limitPrice     Decimal  @db.Decimal(18, 4)
+  snapshot       Json
+  policy         Json
+  request        Json
+  simulation     Json
+  createdAt      DateTime @default(now())
+
+  @@unique([agentId, idempotencyKey])
+  @@index([createdAt])
+}
+
+model TradingAuditEvent {
+  id         String   @id @default(cuid())
+  agentId    String
+  proposalId String
+  event      String
+  details    Json
+  createdAt  DateTime @default(now())
+
+  @@index([proposalId, createdAt])
+}
