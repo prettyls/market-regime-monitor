@@ -42,7 +42,7 @@ describe("landing page flow", () => {
     const location = { search: "", href: "" };
     const fetch = vi.fn(async (path: string) => ({ ok: true, status: 200, json: async () => {
       if (path === "/api/v1/instruments") return [{ symbol: "SPY", name: "S&P 500" }];
-      if (path === "/api/v1/analyses/latest") return [{ symbol: "SPY", name: "S&P 500", analysis: { status: "NORMAL", regime: "MEAN_REVERSION", score: 12, confidence: 65, timestamp: "2026-11-12" } }];
+      if (path === "/api/v1/analyses/latest") return [{ symbol: "NVDA", name: "NVIDIA", kind: "EQUITY", analysis: null }, { symbol: "SPY", name: "S&P 500", kind: "ETF", analysis: { status: "NORMAL", regime: "MEAN_REVERSION", score: 12, confidence: 65, timestamp: "2026-11-12" } }];
       return {};
     } }));
     runInNewContext(uiHtml.match(/<script>([\s\S]*?)<\/script>/)![1]!, {
@@ -50,8 +50,17 @@ describe("landing page flow", () => {
       location, fetch, URLSearchParams, setInterval: () => 0,
     });
     await vi.waitFor(() => expect(fetch).toHaveBeenCalledWith("/api/v1/analyses/latest", { method: "GET" }));
-    await vi.waitFor(() => expect(nodes.get("results").children).toHaveLength(1));
-    const table = nodes.get("results").children[0];
+    await vi.waitFor(() => expect(nodes.get("results").children).toHaveLength(6));
+    const panels = nodes.get("results").children;
+    expect(panels.map((panel: any) => panel.children[0].textContent)).toEqual([
+      "Indices (0)", "ETFs (1)", "Equities (1)", "Rates (0)", "Commodities (0)", "Other (0)"
+    ]);
+    expect(panels.every((panel: any) => panel.open === true)).toBe(true);
+    expect(panels[0].children[1].children).toHaveLength(0);
+    const equityRow = panels[2].children[1].children[0].children[1].children[0];
+    expect(equityRow.children[0].children[0].textContent).toBe("NVDA - NVIDIA");
+    expect(equityRow.children[1].children[0]).toBe("Not analyzed");
+    const table = panels[1].children[1].children[0];
     const regime = table.children[1].children[0].children[2].children[0];
     expect(regime.textContent).toBe("MEAN_REVERSION");
     expect(regime.title).toContain("recent average");

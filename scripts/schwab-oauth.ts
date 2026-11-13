@@ -96,7 +96,7 @@ async function testFetch(accessToken: string, refreshToken?: string): Promise<vo
 async function main(): Promise<void> {
   const arg = process.argv[2];
 
-  if (!arg) {
+  if (!arg || arg === "url") {
     const { authUrl } = await manager.getAuthorizationUrl();
     console.log("\n1. Open this URL in a browser and log in with your Schwab account:\n");
     console.log(authUrl);
@@ -105,7 +105,7 @@ async function main(): Promise<void> {
         ` (${redirectUri}); the page will likely fail to load (connection refused) - that's expected.`
     );
     console.log("3. Copy the FULL url from the address bar and re-run:\n");
-    console.log("   tsx scripts/schwab-oauth.ts '<pasted-redirect-url>'\n");
+    console.log("   npm run schwab:oauth -- '<pasted-redirect-url>'\n");
     return;
   }
 

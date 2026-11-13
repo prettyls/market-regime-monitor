@@ -11,6 +11,7 @@
     "collect": "tsx src/collect.ts",
     "backtest": "tsx src/backtest.ts",
     "cli": "tsx src/cli.ts",
+    "schwab:oauth": "tsx scripts/schwab-oauth.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "tsc --noEmit",

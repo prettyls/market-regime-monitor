@@ -1,3 +1,4 @@
+import { registerTradingRoutes } from "./trading/routes.js";
 import sensible from "@fastify/sensible";
 import Fastify, { type FastifyError } from "fastify";
 import { prisma } from "./db.js";
@@ -9,8 +10,9 @@ import { newInstrumentHtml } from "./web/new-instrument.js";
 import { analysisHtml, uiHtml } from "./web/ui.js";
 
 export function buildApp() {
-  const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? "info", ...(process.env.NODE_ENV === "production" ? {} : { transport: { target: "pino-pretty" } }) } });
+  const app = Fastify({ logger: { redact: ["req.headers.authorization"], level: process.env.LOG_LEVEL ?? "info", ...(process.env.NODE_ENV === "production" ? {} : { transport: { target: "pino-pretty" } }) } });
   void app.register(sensible);
+  registerTradingRoutes(app, prisma);
   const providers = new ProviderRegistry();
   const service = new MarketService(prisma, providers, app.log);
   const newInstrumentPage = newInstrumentHtml(providers.names());
@@ -21,7 +23,7 @@ export function buildApp() {
       orderBy: { symbol: "asc" },
       include: { analyses: { orderBy: { timestamp: "desc" }, take: 1 } },
     });
-    return instruments.map(({ analyses, symbol, name }) => ({ symbol, name, analysis: analyses[0] ? withStatus(analyses[0]) : null }));
+    return instruments.map(({ analyses, symbol, name, kind }) => ({ symbol, name, kind, analysis: analyses[0] ? withStatus(analyses[0]) : null }));
   });
   app.get("/instruments/new", async (_request, reply) => reply.type("text/html; charset=utf-8").send(newInstrumentPage));
   app.get("/health", async () => ({ status: "ok" }));

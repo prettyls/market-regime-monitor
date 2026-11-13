@@ -23,6 +23,13 @@ ${baseStyles}
   .metric span:first-child { font-size: 12px; color: var(--muted); }
   .metric span:last-child { font-size: 18px; font-weight: 600; }
   .table-scroll { overflow-x: auto; }
+  .kind-panel { border: 1px solid var(--border); border-radius: 6px; margin-top: 12px; overflow: hidden; }
+  .kind-panel summary { display: flex; gap: 10px; align-items: center; padding: 12px; cursor: pointer; font-size: 14px; font-weight: 600; list-style: none; }
+  .kind-panel summary::-webkit-details-marker { display: none; }
+  .kind-panel summary::before { content: "+"; display: inline-flex; justify-content: center; align-items: center; width: 18px; height: 18px; border: 1px solid var(--border); border-radius: 4px; font-weight: 500; }
+  .kind-panel[open] > summary::before { content: "−"; }
+  .kind-panel summary:focus-visible { outline: 2px solid #2563eb; outline-offset: -2px; }
+  .kind-panel .table-scroll { padding: 0 12px 12px; min-height: 12px; }
   table { width: 100%; border-collapse: collapse; font-size: 14px; }
   th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--border); }
   th { color: var(--muted); font-weight: 500; }
@@ -245,12 +252,17 @@ ${baseStyles}
 
   async function loadResults() {
     var instruments = await api("GET", "/api/v1/analyses/latest");
-    if (!instruments.length) { $("results").replaceChildren("No instruments configured. Use Add instrument to create one."); return; }
-    var rows = instruments.map(function (i) {
+    var kinds = [["INDEX", "Indices"], ["ETF", "ETFs"], ["EQUITY", "Equities"], ["RATE", "Rates"], ["COMMODITY", "Commodities"], ["OTHER", "Other"]];
+    var panels = kinds.map(function (kind) {
+    var members = instruments.filter(function (i) { return i.kind === kind[0]; });
+    var rows = members.map(function (i) {
       var a = i.analysis;
       return [el("a", { href: "/analysis?symbol=" + encodeURIComponent(i.symbol), textContent: i.symbol + " - " + i.name }), a ? term(a.status) : "Not analyzed", a ? term(a.regime) : "-", a ? fmt(a.score) : "-", a ? fmt(a.confidence) + "%" : "-", a ? date(a.timestamp) : "-"];
     });
-    $("results").replaceChildren(table(["Instrument", "Status", "Regime", "Score", "Signal strength", "As of"], rows));
+    var content = el("div", { className: "table-scroll" }, rows.length ? [table(["Instrument", "Status", "Regime", "Score", "Signal strength", "As of"], rows)] : []);
+    return el("details", { className: "kind-panel", open: true }, [el("summary", { textContent: kind[1] + " (" + members.length + ")" }), content]);
+    });
+    $("results").replaceChildren.apply($("results"), panels);
   }
 
   run("Loading instruments", async function () {
