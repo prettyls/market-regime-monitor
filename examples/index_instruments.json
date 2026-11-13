@@ -1,0 +1,23 @@
+[
+  {
+    "symbol": "VIX",
+    "name": "CBOE Volatility Index",
+    "kind": "INDEX",
+    "provider": "charles_schwab",
+    "providerSymbol": "$VIX"
+  },
+  {
+    "symbol": "SPX",
+    "name": "S&P 500 Index",
+    "kind": "INDEX",
+    "provider": "charles_schwab",
+    "providerSymbol": "$SPX"
+  },
+  {
+    "symbol": "COMPX",
+    "name": "Nasdaq Composite Index",
+    "kind": "INDEX",
+    "provider": "charles_schwab",
+    "providerSymbol": "$COMPX"
+  }
+]

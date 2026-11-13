@@ -111,7 +111,23 @@ npm run cli -- alerts --symbol SPX
 npm run cli -- backtest SPX
 ```
 
-`instrument:add` applies the default configuration. For custom thresholds, create an instrument through the API or edit its JSON configuration through your own administration layer.
+`instrument:add` applies the default configuration. To add or update multiple instruments, save a JSON array (see [`examples/instruments.json`](examples/instruments.json)) and run:
+
+```sh
+npm run cli -- instruments:load examples/instruments.json
+```
+
+Examples grouped by kind are available in `examples/etf_instruments.json`, `examples/equity_instruments.json`, and `examples/index_instruments.json`:
+
+```sh
+npm run cli -- instruments:load examples/etf_instruments.json
+npm run cli -- instruments:load examples/equity_instruments.json
+npm run cli -- instruments:load examples/index_instruments.json
+```
+
+The equity example uses SPCX for Space Exploration Technologies Corporation. The former SPAC and New Issue ETF changed its ticker from SPCX to SPCK in April 2026.
+
+Each entry requires `symbol`, `name`, `kind`, `provider`, and `providerSymbol`. Only `config` is optional and uses the default pattern configuration when omitted. Supply a complete `config` object for custom thresholds. Relative file paths resolve from the current working directory. The entire file is validated before writing, including rejecting duplicate symbols (case-insensitive). Existing symbols are updated. Writes run sequentially and stop on failure; earlier successful writes remain and can safely be retried. This command registers instruments; use `npm run collect` afterward to import history and analyze active instruments.
 
 `data` displays imported daily OHLC prices and volume in chronological order. `--symbol` is required and case-insensitive. Both `--from` and `--to` are optional inclusive UTC dates in `YYYY-MM-DD` format; omit either to leave that end of the range unbounded. With neither date, all stored daily bars for the symbol are shown. This command reads the database without fetching new data.
 

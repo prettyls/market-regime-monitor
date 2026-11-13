@@ -1,0 +1,79 @@
+[
+  {
+    "symbol": "NVDA",
+    "name": "NVIDIA Corporation",
+    "kind": "EQUITY",
+    "provider": "charles_schwab",
+    "providerSymbol": "NVDA"
+  },
+  {
+    "symbol": "AMZN",
+    "name": "Amazon.com, Inc.",
+    "kind": "EQUITY",
+    "provider": "charles_schwab",
+    "providerSymbol": "AMZN"
+  },
+  {
+    "symbol": "TSLA",
+    "name": "Tesla, Inc.",
+    "kind": "EQUITY",
+    "provider": "charles_schwab",
+    "providerSymbol": "TSLA"
+  },
+  {
+    "symbol": "CMCSA",
+    "name": "Comcast Corporation",
+    "kind": "EQUITY",
+    "provider": "charles_schwab",
+    "providerSymbol": "CMCSA"
+  },
+  {
+    "symbol": "ARM",
+    "name": "Arm Holdings plc",
+    "kind": "EQUITY",
+    "provider": "charles_schwab",
+    "providerSymbol": "ARM"
+  },
+  {
+    "symbol": "MSFT",
+    "name": "Microsoft Corporation",
+    "kind": "EQUITY",
+    "provider": "charles_schwab",
+    "providerSymbol": "MSFT"
+  },
+  {
+    "symbol": "OKLO",
+    "name": "Oklo Inc.",
+    "kind": "EQUITY",
+    "provider": "charles_schwab",
+    "providerSymbol": "OKLO"
+  },
+  {
+    "symbol": "TEM",
+    "name": "Tempus AI, Inc.",
+    "kind": "EQUITY",
+    "provider": "charles_schwab",
+    "providerSymbol": "TEM"
+  },
+  {
+    "symbol": "ACHR",
+    "name": "Archer Aviation Inc.",
+    "kind": "EQUITY",
+    "provider": "charles_schwab",
+    "providerSymbol": "ACHR"
+  },
+  {
+    "symbol": "JOBY",
+    "name": "Joby Aviation, Inc.",
+    "kind": "EQUITY",
+    "provider": "charles_schwab",
+    "providerSymbol": "JOBY"
+  },
+  {
+    "symbol": "SPCX",
+    "name": "Space Exploration Technologies Corporation",
+    "kind": "EQUITY",
+    "provider": "charles_schwab",
+    "providerSymbol": "SPCX"
+  }
+]

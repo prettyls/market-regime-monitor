@@ -1,0 +1,58 @@
+[
+  {
+    "symbol": "SPY",
+    "name": "SPDR S&P 500 ETF Trust",
+    "kind": "ETF",
+    "provider": "charles_schwab",
+    "providerSymbol": "SPY"
+  },
+  {
+    "symbol": "SOXL",
+    "name": "Direxion Daily Semiconductor Bull 3X Shares",
+    "kind": "ETF",
+    "provider": "charles_schwab",
+    "providerSymbol": "SOXL"
+  },
+  {
+    "symbol": "TQQQ",
+    "name": "ProShares UltraPro QQQ",
+    "kind": "ETF",
+    "provider": "charles_schwab",
+    "providerSymbol": "TQQQ"
+  },
+  {
+    "symbol": "UVIX",
+    "name": "2x Long VIX Futures ETF",
+    "kind": "ETF",
+    "provider": "charles_schwab",
+    "providerSymbol": "UVIX"
+  },
+  {
+    "symbol": "ARKB",
+    "name": "ARK 21Shares Bitcoin ETF",
+    "kind": "ETF",
+    "provider": "charles_schwab",
+    "providerSymbol": "ARKB"
+  },
+  {
+    "symbol": "SCHD",
+    "name": "Schwab U.S. Dividend Equity ETF",
+    "kind": "ETF",
+    "provider": "charles_schwab",
+    "providerSymbol": "SCHD"
+  },
+  {
+    "symbol": "VGT",
+    "name": "Vanguard Information Technology ETF",
+    "kind": "ETF",
+    "provider": "charles_schwab",
+    "providerSymbol": "VGT"
+  },
+  {
+    "symbol": "XLK",
+    "name": "State Street Technology Select Sector SPDR ETF",
+    "kind": "ETF",
+    "provider": "charles_schwab",
+    "providerSymbol": "XLK"
+  }
+]

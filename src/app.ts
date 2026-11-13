@@ -23,7 +23,7 @@ export function buildApp() {
       orderBy: { symbol: "asc" },
       include: { analyses: { orderBy: { timestamp: "desc" }, take: 1 } },
     });
-    return instruments.map(({ analyses, symbol, name }) => ({ symbol, name, analysis: analyses[0] ? withStatus(analyses[0]) : null }));
+    return instruments.map(({ analyses, symbol, name, kind }) => ({ symbol, name, kind, analysis: analyses[0] ? withStatus(analyses[0]) : null }));
   });
   app.get("/instruments/new", async (_request, reply) => reply.type("text/html; charset=utf-8").send(newInstrumentPage));
   app.get("/health", async () => ({ status: "ok" }));
