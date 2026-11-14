@@ -76,7 +76,7 @@ This uploads the source filtered by `.gcloudignore` and runs [cloudbuild.yaml](.
 4. Creates a seed job without executing it.
 5. Creates or updates a Cloud Scheduler job that runs the daily-bar job at 7:30am America/New_York.
 
-A failed migration stops the build before the API or the other jobs change. The manual command tags images with a UTC timestamp. Set `IMAGE_TAG` for an explicit release identifier. `SERVICE_NAME`, `REPOSITORY`, `DATABASE_SECRET`, and `SECRET_VERSION` are also configurable. The defaults name the service `market-regime-monitor` and its jobs with `-migrate`, `-collect`, `-daily`, `-backtest`, and `-seed` suffixes. The `-daily` job runs `node dist/src/collect.js --last-day`. Re-running the script builds a new release and applies pending migrations before deploying it. Use backward-compatible migrations because an older API revision can still be serving during migration.
+A failed migration stops the build before the API or the other jobs change. The manual command tags images with a UTC timestamp. Set `IMAGE_TAG` for an explicit release identifier. `SERVICE_NAME`, `REPOSITORY`, `DATABASE_SECRET`, and `SECRET_VERSION` are also configurable. The defaults name the service `market-regime-monitor` and its jobs with `-migrate`, `-collect`, `-daily`, `-backtest`, and `-seed` suffixes. The `-daily` job runs `node dist/src/daily.js --last-day`. Re-running the script builds a new release and applies pending migrations before deploying it. Use backward-compatible migrations because an older API revision can still be serving during migration.
 
 Deploys set `NODE_ENV`, `LOG_LEVEL`, and `HOST` and leave every other environment variable in place, including `DATABASE_URL` and the Schwab tokens applied with [update-cloud-run-tokens.sh](../scripts/update-cloud-run-tokens.sh). Collector, daily-bar, Backtest, and Seed jobs created for the first time do not inherit those variables. Apply the tokens again after they exist, and set `DATABASE_URL` on each new job or set `DATABASE_SECRET` so the next deploy binds it.
 
@@ -90,7 +90,7 @@ gcloud run jobs execute market-regime-monitor-backtest --project="$PROJECT_ID" -
 
 Jobs use one task and no automatic retries. Do not overlap collector executions. Collection uses all active configured instruments and can still fail if a data provider denies access.
 
-Each deploy ensures Cloud Scheduler job `market-regime-monitor-daily` posts to the Cloud Run jobs API at 07:30 America/New_York (`30 7 * * *`). That executes `market-regime-monitor-daily`, which imports the previous weekday's daily bar for every active instrument and then analyzes it. Saturday, Sunday, and Monday mornings import Friday. A market holiday returns no bar and skips analysis. Re-run [setup-cloud-build-trigger.sh](../scripts/setup-cloud-build-trigger.sh) once before the first scheduled deploy so the deployer can manage Cloud Scheduler and Cloud Scheduler can mint a token for the runtime service account. The runtime account receives `roles/run.invoker` on the daily job during deploy.
+Each deploy ensures Cloud Scheduler job `market-regime-monitor-daily` posts to the Cloud Run jobs API on weekdays at 07:30 America/New_York (`30 7 * * 1-5`). That executes `market-regime-monitor-daily`, which imports the previous weekday's daily bar for every active instrument and then analyzes it. Weekends are not scheduled. Monday mornings normally import Friday. A market holiday returns no bar and skips analysis. Re-run [setup-cloud-build-trigger.sh](../scripts/setup-cloud-build-trigger.sh) once before the first scheduled deploy so the deployer can manage Cloud Scheduler and Cloud Scheduler can mint a token for the runtime service account. The runtime account receives `roles/run.invoker` on the daily job during deploy.
 
 ## Deploy on each merge to main
 
@@ -163,3 +163,6 @@ Public pages read saved results and do not trigger provider downloads or analysi
 The existing service limits remain 1 CPU, 512 MiB, concurrency 20, and maximum 3 instances. This cache reduces repeat database reads; it is not a rate limiter or DDoS protection. If public traffic exhausts resources, measure latency and memory, then tune concurrency and consider a load balancer with Cloud Armor rate limiting. Maximum instances limits scaling, not a strict spending cap.
 
 References: [Cloud Run public access](https://docs.cloud.google.com/run/docs/authenticating/public), [concurrency](https://docs.cloud.google.com/run/docs/about-concurrency), [maximum instance limits](https://docs.cloud.google.com/run/docs/configuring/max-instances-limits).
+
+The deployment also creates paper execution and report jobs/schedulers. See
+[scheduled paper trading](paper-trading.md) for secret setup and behavior.

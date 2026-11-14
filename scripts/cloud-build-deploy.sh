@@ -87,7 +87,7 @@ done
 
 echo "Deploying job ${_SERVICE_NAME}-daily"
 gcloud run jobs deploy "${_SERVICE_NAME}-daily" "${job_args[@]}" \
-  --image="$app_image" --command=node --args=dist/src/collect.js,--last-day
+  --image="$app_image" --command=node --args=dist/src/daily.js,--last-day
 
 echo "Granting ${service_account} permission to execute ${_SERVICE_NAME}-daily"
 gcloud run jobs add-iam-policy-binding "${_SERVICE_NAME}-daily" \
@@ -101,7 +101,7 @@ daily_uri="https://run.googleapis.com/v2/projects/${PROJECT_ID}/locations/${_REG
 scheduler_args=(
   --project="$PROJECT_ID"
   --location="${_REGION}"
-  --schedule="30 7 * * *"
+  --schedule="30 7 * * 1-5"
   --time-zone="America/New_York"
   --uri="$daily_uri"
   --http-method=POST
@@ -115,6 +115,27 @@ else
   echo "Creating Cloud Scheduler job ${_SERVICE_NAME}-daily"
   gcloud scheduler jobs create http "${_SERVICE_NAME}-daily" "${scheduler_args[@]}"
 fi
+
+# Independent execution/report schedules only consume persisted, successful plans.
+for phase in execute report; do
+  paper_job="${_SERVICE_NAME}-paper-${phase}"
+  gcloud run jobs deploy "$paper_job" "${job_args[@]}" \
+    --image="$app_image" --command=node --args="dist/src/paper-job.js,${phase}"
+  gcloud run jobs add-iam-policy-binding "$paper_job" \
+    --project="$PROJECT_ID" --region="${_REGION}" \
+    --member="serviceAccount:${service_account}" --role=roles/run.invoker --quiet >/dev/null
+  if [[ "$phase" == "execute" ]]; then cron="35 9 * * 1-5"; else cron="15 16 * * 1-5"; fi
+  paper_scheduler_args=(--project="$PROJECT_ID" --location="${_REGION}"
+    --schedule="$cron" --time-zone=America/New_York --http-method=POST
+    --uri="https://run.googleapis.com/v2/projects/${PROJECT_ID}/locations/${_REGION}/jobs/${paper_job}:run"
+    --oauth-service-account-email="$service_account"
+    --description="Paper-only ${phase}; closed sessions are skipped")
+  if gcloud scheduler jobs describe "$paper_job" --project="$PROJECT_ID" --location="${_REGION}" >/dev/null 2>&1; then
+    gcloud scheduler jobs update http "$paper_job" "${paper_scheduler_args[@]}"
+  else
+    gcloud scheduler jobs create http "$paper_job" "${paper_scheduler_args[@]}"
+  fi
+done
 
 echo "Deploying job ${_SERVICE_NAME}-seed"
 gcloud run jobs deploy "${_SERVICE_NAME}-seed" "${job_args[@]}" \

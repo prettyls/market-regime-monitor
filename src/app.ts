@@ -1,3 +1,4 @@
+import { SchwabPortfolioError } from "./trading/schwab.js";
 import { registerAccess } from "./access.js";
 import { registerTradingRoutes } from "./trading/routes.js";
 import sensible from "@fastify/sensible";
@@ -41,7 +42,7 @@ export function buildApp() {
   app.get("/api/v1/signals/:symbol", async (request) => { const analysis = await prisma.analysis.findFirst({ where: { instrument: { symbol: (request.params as { symbol: string }).symbol.toUpperCase() } }, orderBy: { timestamp: "desc" }, select: { timestamp: true, regime: true, score: true, confidence: true, signals: true } }); return analysis ?? app.httpErrors.notFound("No analysis found"); });
   app.get("/api/v1/alerts", async (request) => { const query = alertQuerySchema.parse(request.query); return prisma.alert.findMany({ where: { ...(query.symbol ? { instrument: { symbol: query.symbol.toUpperCase() } } : {}), ...(query.severity ? { severity: query.severity } : {}) }, include: { instrument: { select: { symbol: true } } }, orderBy: { timestamp: "desc" }, take: query.limit }); });
   app.get("/api/v1/instruments/:symbol/backtest", async (request) => service.backtest((request.params as { symbol: string }).symbol));
-  app.setErrorHandler((error: FastifyError, _request, reply) => { const status = error.name === "ZodError" ? 400 : error.message.includes("not found") ? 404 : error.statusCode ?? 500; if (status >= 500) app.log.error(error); void reply.code(status).send({ error: status >= 500 ? "InternalServerError" : error.name, message: status >= 500 ? "Internal server error" : error.message }); });
+  app.setErrorHandler((error: FastifyError, _request, reply) => { const status = error.name === "ZodError" ? 400 : error.message.includes("not found") ? 404 : error.statusCode ?? 500; if (status >= 500) app.log.error(error); if (error instanceof SchwabPortfolioError) { void reply.code(error.statusCode).send({ error: error.code, message: error.message }); return; } void reply.code(status).send({ error: status >= 500 ? "InternalServerError" : error.name, message: status >= 500 ? "Internal server error" : error.message }); });
   app.addHook("onClose", async () => prisma.$disconnect());
   return app;
 }

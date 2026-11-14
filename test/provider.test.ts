@@ -78,13 +78,11 @@ describe("PropositionMapping", () => {
 describe("ProviderRegistry", () => {
   const originalEnv = {
     DATA_PROVIDER: process.env.DATA_PROVIDER,
-    SCHWAB_ACCESS_TOKEN: process.env.SCHWAB_ACCESS_TOKEN,
-    SCHWAB_REFRESH_TOKEN: process.env.SCHWAB_REFRESH_TOKEN,
-    CLIENT_ID: process.env.CLIENT_ID,
-    CLIENT_SECRET: process.env.CLIENT_SECRET,
-    SCHWAB_CLIENT_ID: process.env.SCHWAB_CLIENT_ID,
-    SCHWAB_CLIENT_SECRET: process.env.SCHWAB_CLIENT_SECRET,
-    SCHWAB_ACCESS_TOKEN_EXPIRES_AT: process.env.SCHWAB_ACCESS_TOKEN_EXPIRES_AT,
+    SCHWAB_MARKET_ACCESS_TOKEN: process.env.SCHWAB_MARKET_ACCESS_TOKEN,
+    SCHWAB_MARKET_REFRESH_TOKEN: process.env.SCHWAB_MARKET_REFRESH_TOKEN,
+    SCHWAB_MARKET_CLIENT_ID: process.env.SCHWAB_MARKET_CLIENT_ID,
+    SCHWAB_MARKET_CLIENT_SECRET: process.env.SCHWAB_MARKET_CLIENT_SECRET,
+    SCHWAB_MARKET_ACCESS_TOKEN_EXPIRES_AT: process.env.SCHWAB_MARKET_ACCESS_TOKEN_EXPIRES_AT,
   };
 
   const restoreEnv = () => {
@@ -100,53 +98,53 @@ describe("ProviderRegistry", () => {
 
   it("requires an access token for Schwab provider", () => {
     process.env.DATA_PROVIDER = "schawb";
-    delete process.env.SCHWAB_ACCESS_TOKEN;
-    delete process.env.SCHWAB_REFRESH_TOKEN;
+    delete process.env.SCHWAB_MARKET_ACCESS_TOKEN;
+    delete process.env.SCHWAB_MARKET_REFRESH_TOKEN;
 
-    expect(() => new ProviderRegistry()).toThrow("SCHWAB_ACCESS_TOKEN is required when DATA_PROVIDER is Schwab");
+    expect(() => new ProviderRegistry()).toThrow("SCHWAB_MARKET_ACCESS_TOKEN is required when DATA_PROVIDER is Schwab");
   });
 
   it("rejects Schwab token placeholders from .env.example", () => {
     process.env.DATA_PROVIDER = "schawb";
-    process.env.SCHWAB_ACCESS_TOKEN = "YOUR_SCHWAB_ACCESS_TOKEN";
-    process.env.SCHWAB_REFRESH_TOKEN = "YOUR_SCHWAB_REFRESH_TOKEN";
-    process.env.CLIENT_ID = "client-id";
-    process.env.CLIENT_SECRET = "client-secret";
+    process.env.SCHWAB_MARKET_ACCESS_TOKEN = "YOUR_SCHWAB_ACCESS_TOKEN";
+    process.env.SCHWAB_MARKET_REFRESH_TOKEN = "YOUR_SCHWAB_REFRESH_TOKEN";
+    process.env.SCHWAB_MARKET_CLIENT_ID = "client-id";
+    process.env.SCHWAB_MARKET_CLIENT_SECRET = "client-secret";
 
     expect(() => new ProviderRegistry()).toThrow(".env.example placeholder");
   });
 
   it("rejects placeholder Schwab client credentials used for token refresh", () => {
     process.env.DATA_PROVIDER = "schawb";
-    process.env.SCHWAB_ACCESS_TOKEN = "token";
-    process.env.SCHWAB_REFRESH_TOKEN = "refresh-token";
-    delete process.env.SCHWAB_CLIENT_ID;
-    delete process.env.SCHWAB_CLIENT_SECRET;
-    process.env.CLIENT_ID = "YOUR_DEVELOPER_CLIENT_ID";
-    process.env.CLIENT_SECRET = "YOUR_DEVELOPER_CLIENT_SECRETS";
+    process.env.SCHWAB_MARKET_ACCESS_TOKEN = "token";
+    process.env.SCHWAB_MARKET_REFRESH_TOKEN = "refresh-token";
+    delete process.env.SCHWAB_MARKET_CLIENT_ID;
+    delete process.env.SCHWAB_MARKET_CLIENT_SECRET;
+    process.env.SCHWAB_MARKET_CLIENT_ID = "YOUR_DEVELOPER_CLIENT_ID";
+    process.env.SCHWAB_MARKET_CLIENT_SECRET = "YOUR_DEVELOPER_CLIENT_SECRETS";
 
-    expect(() => new ProviderRegistry()).toThrow(/\.env\.example placeholder for CLIENT_ID, CLIENT_SECRET/);
+    expect(() => new ProviderRegistry()).toThrow(/\.env\.example placeholder for SCHWAB_MARKET_CLIENT_ID, SCHWAB_MARKET_CLIENT_SECRET/);
   });
 
   it("derives access-token expiry from the token response instead of the environment", () => {
     process.env.DATA_PROVIDER = "schawb";
-    process.env.SCHWAB_ACCESS_TOKEN = "token";
-    delete process.env.SCHWAB_REFRESH_TOKEN;
-    process.env.SCHWAB_ACCESS_TOKEN_EXPIRES_AT = "not-a-timestamp";
+    process.env.SCHWAB_MARKET_ACCESS_TOKEN = "token";
+    delete process.env.SCHWAB_MARKET_REFRESH_TOKEN;
+    process.env.SCHWAB_MARKET_ACCESS_TOKEN_EXPIRES_AT = "not-a-timestamp";
 
     expect(() => new ProviderRegistry()).not.toThrow();
-    expect(process.env.SCHWAB_ACCESS_TOKEN_EXPIRES_AT).toBeUndefined();
+    expect(process.env.SCHWAB_MARKET_ACCESS_TOKEN_EXPIRES_AT).toBeUndefined();
   });
 
   it("requires Schwab credentials when refresh token is set", () => {
     process.env.DATA_PROVIDER = "schawb";
-    process.env.SCHWAB_ACCESS_TOKEN = "token";
-    process.env.SCHWAB_REFRESH_TOKEN = "refresh-token";
-    delete process.env.CLIENT_ID;
-    delete process.env.CLIENT_SECRET;
-    delete process.env.SCHWAB_CLIENT_ID;
-    delete process.env.SCHWAB_CLIENT_SECRET;
+    process.env.SCHWAB_MARKET_ACCESS_TOKEN = "token";
+    process.env.SCHWAB_MARKET_REFRESH_TOKEN = "refresh-token";
+    delete process.env.SCHWAB_MARKET_CLIENT_ID;
+    delete process.env.SCHWAB_MARKET_CLIENT_SECRET;
+    delete process.env.SCHWAB_MARKET_CLIENT_ID;
+    delete process.env.SCHWAB_MARKET_CLIENT_SECRET;
 
-    expect(() => new ProviderRegistry()).toThrow("SCHWAB_REFRESH_TOKEN requires CLIENT_ID and CLIENT_SECRET");
+    expect(() => new ProviderRegistry()).toThrow("SCHWAB_MARKET_REFRESH_TOKEN requires SCHWAB_MARKET_CLIENT_ID and SCHWAB_MARKET_CLIENT_SECRET");
   });
 });

@@ -3,3 +3,9 @@ dist/
 .env
 coverage/
 *.log
+
+# Local Codex MCP configuration may contain credentials
+/.codex/config.toml
+
+# Local package manager cache
+.pnpm-store/

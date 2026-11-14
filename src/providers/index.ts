@@ -15,34 +15,34 @@ const readNonEmpty = (...values: Array<string | undefined>): string | undefined 
 const isExampleValue = (value: string): boolean => /^YOUR_[A-Z0-9_]+$/.test(value);
 
 const resolveSchwabProviderAuthFromEnv = (tracker: TokenExpiryTracker): SchwabProviderAuth => {
-  const accessToken = readNonEmpty(process.env.SCHWAB_ACCESS_TOKEN);
+  const accessToken = readNonEmpty(process.env.SCHWAB_MARKET_ACCESS_TOKEN);
   if (!accessToken) {
     throw new Error(
-      "SCHWAB_ACCESS_TOKEN is required when DATA_PROVIDER is Schwab. To enable automatic refresh, also set SCHWAB_REFRESH_TOKEN and CLIENT_ID/CLIENT_SECRET."
+      "SCHWAB_MARKET_ACCESS_TOKEN is required when DATA_PROVIDER is Schwab. To enable automatic refresh, also set SCHWAB_MARKET_REFRESH_TOKEN and SCHWAB_MARKET_CLIENT_ID/SCHWAB_MARKET_CLIENT_SECRET."
     );
   }
 
-  const refreshToken = readNonEmpty(process.env.SCHWAB_REFRESH_TOKEN);
-  const clientId = readNonEmpty(process.env.SCHWAB_CLIENT_ID, process.env.CLIENT_ID);
-  const clientSecret = readNonEmpty(process.env.SCHWAB_CLIENT_SECRET, process.env.CLIENT_SECRET);
+  const refreshToken = readNonEmpty(process.env.SCHWAB_MARKET_REFRESH_TOKEN);
+  const clientId = readNonEmpty(process.env.SCHWAB_MARKET_CLIENT_ID);
+  const clientSecret = readNonEmpty(process.env.SCHWAB_MARKET_CLIENT_SECRET);
   const placeholderFields = [
-    ["SCHWAB_ACCESS_TOKEN", accessToken],
-    ["SCHWAB_REFRESH_TOKEN", refreshToken],
-    ["CLIENT_ID", clientId],
-    ["CLIENT_SECRET", clientSecret],
+    ["SCHWAB_MARKET_ACCESS_TOKEN", accessToken],
+    ["SCHWAB_MARKET_REFRESH_TOKEN", refreshToken],
+    ["SCHWAB_MARKET_CLIENT_ID", clientId],
+    ["SCHWAB_MARKET_CLIENT_SECRET", clientSecret],
   ].flatMap(([name, value]) => (value !== undefined && isExampleValue(value) ? [name] : []));
   if (placeholderFields.length > 0) {
     throw new Error(
-      `Schwab configuration contains a .env.example placeholder for ${placeholderFields.join(", ")}. Set the issued SCHWAB_ACCESS_TOKEN and SCHWAB_REFRESH_TOKEN from the OAuth flow, and set CLIENT_ID and CLIENT_SECRET (or SCHWAB_CLIENT_ID and SCHWAB_CLIENT_SECRET) from the Schwab Developer Portal. Client credentials cannot authenticate API requests by themselves.`
+      `Schwab configuration contains a .env.example placeholder for ${placeholderFields.join(", ")}. Set the issued SCHWAB_MARKET_ACCESS_TOKEN and SCHWAB_MARKET_REFRESH_TOKEN from the OAuth flow, and set SCHWAB_MARKET_CLIENT_ID and SCHWAB_MARKET_CLIENT_SECRET from the Schwab Developer Portal. Client credentials cannot authenticate API requests by themselves.`
     );
   }
   if (refreshToken && (!clientId || !clientSecret)) {
-    throw new Error("SCHWAB_REFRESH_TOKEN requires CLIENT_ID and CLIENT_SECRET (or SCHWAB_CLIENT_ID/SCHWAB_CLIENT_SECRET).");
+    throw new Error("SCHWAB_MARKET_REFRESH_TOKEN requires SCHWAB_MARKET_CLIENT_ID and SCHWAB_MARKET_CLIENT_SECRET.");
   }
 
-  delete process.env.SCHWAB_ACCESS_TOKEN_EXPIRES_AT;
+  delete process.env.SCHWAB_MARKET_ACCESS_TOKEN_EXPIRES_AT;
 
-  const redirectUri = readNonEmpty(process.env.SCHWAB_REDIRECT_URI);
+  const redirectUri = readNonEmpty(process.env.SCHWAB_MARKET_REDIRECT_URI);
   const authConfig: SchwabProviderAuth = {
     accessToken,
     ...(refreshToken ? { refreshToken } : {}),
@@ -50,10 +50,10 @@ const resolveSchwabProviderAuthFromEnv = (tracker: TokenExpiryTracker): SchwabPr
     ...(clientSecret ? { clientSecret } : {}),
     ...(redirectUri ? { redirectUri } : {}),
     onTokenUpdate: (tokenData) => {
-      process.env.SCHWAB_ACCESS_TOKEN = tokenData.accessToken;
+      process.env.SCHWAB_MARKET_ACCESS_TOKEN = tokenData.accessToken;
       tracker.record(tokenData.expiresAt);
-      if (tokenData.refreshToken) process.env.SCHWAB_REFRESH_TOKEN = tokenData.refreshToken;
-      else delete process.env.SCHWAB_REFRESH_TOKEN;
+      if (tokenData.refreshToken) process.env.SCHWAB_MARKET_REFRESH_TOKEN = tokenData.refreshToken;
+      else delete process.env.SCHWAB_MARKET_REFRESH_TOKEN;
     },
   };
   return authConfig;

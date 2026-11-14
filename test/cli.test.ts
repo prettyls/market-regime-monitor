@@ -17,13 +17,13 @@ vi.mock("pino", () => ({ default: vi.fn(() => ({})) }));
 
 const originalArgv = process.argv;
 const originalDataProvider = process.env.DATA_PROVIDER;
-const originalSchwabAccessToken = process.env.SCHWAB_ACCESS_TOKEN;
-const originalSchwabRefreshToken = process.env.SCHWAB_REFRESH_TOKEN;
+const originalSchwabAccessToken = process.env.SCHWAB_MARKET_ACCESS_TOKEN;
+const originalSchwabRefreshToken = process.env.SCHWAB_MARKET_REFRESH_TOKEN;
 afterEach(() => {
   process.argv = originalArgv;
   process.env.DATA_PROVIDER = originalDataProvider;
-  process.env.SCHWAB_ACCESS_TOKEN = originalSchwabAccessToken;
-  process.env.SCHWAB_REFRESH_TOKEN = originalSchwabRefreshToken;
+  process.env.SCHWAB_MARKET_ACCESS_TOKEN = originalSchwabAccessToken;
+  process.env.SCHWAB_MARKET_REFRESH_TOKEN = originalSchwabRefreshToken;
   process.exitCode = undefined;
   vi.restoreAllMocks();
   vi.clearAllMocks();

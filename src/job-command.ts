@@ -13,7 +13,7 @@ function parseDate(value: string): Date {
   return date;
 }
 
-export function createJobCommand(mode: "collect" | "backtest", service: JobService, activeSymbols: () => Promise<string[]>, output: Pick<Console, "log" | "table" | "error"> = console): Command {
+export function createJobCommand(mode: "collect" | "backtest", service: JobService, activeSymbols: () => Promise<string[]>, output: Pick<Console, "log" | "table" | "error"> = console, afterCollect?: (results: Array<{ symbol: string; timestamp: Date }>) => Promise<void>, resolveLastDay?: () => Promise<Date>): Command {
   const command = new Command(mode)
     .description(mode === "collect" ? "Import and analyze active instruments once, then exit" : "Backtest stored data for active instruments once, then exit")
     .option("--symbol <symbol>", "process one instrument instead of all active instruments", (value: string) => {
@@ -28,7 +28,7 @@ export function createJobCommand(mode: "collect" | "backtest", service: JobServi
   return command.action(async (options: Options) => {
     if (options.lastDay && (options.from || options.to)) throw new Error("--last-day cannot be combined with --from or --to");
     if (options.from && options.to && options.from > options.to) throw new Error("--from must be on or before --to");
-    const lastDay = options.lastDay ? previousWeekday() : undefined;
+    const lastDay = options.lastDay ? (resolveLastDay ? await resolveLastDay() : previousWeekday()) : undefined;
     const from = lastDay ?? options.from;
     const to = lastDay ?? options.to;
     const symbols = options.symbol ? [options.symbol] : await activeSymbols();
@@ -37,6 +37,7 @@ export function createJobCommand(mode: "collect" | "backtest", service: JobServi
       return;
     }
     const failures: string[] = [];
+    const collected: Array<{ symbol: string; timestamp: Date }> = [];
     for (const symbol of symbols) {
       try {
         if (mode === "collect") {
@@ -46,6 +47,7 @@ export function createJobCommand(mode: "collect" | "backtest", service: JobServi
             continue;
           }
           const result = await service.analyze(symbol);
+          collected.push({ symbol, timestamp: result.timestamp });
           output.log({ symbol, imported, timestamp: result.timestamp, regime: result.regime });
         } else {
           const result = await service.backtest(symbol);
@@ -58,5 +60,6 @@ export function createJobCommand(mode: "collect" | "backtest", service: JobServi
       }
     }
     if (failures.length) throw new Error(`${mode} failed for: ${failures.join(", ")}`);
+    if (mode === "collect" && collected.length && afterCollect) await afterCollect(collected);
   });
 }

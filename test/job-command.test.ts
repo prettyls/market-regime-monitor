@@ -90,3 +90,23 @@ it.each([
   expect(activeSymbols).not.toHaveBeenCalled();
   expect(service.importHistory).not.toHaveBeenCalled();
 });
+
+it("triggers the agent hook only after all collection succeeds", async () => {
+  const service = { importHistory: vi.fn().mockResolvedValue(1), analyze: vi.fn().mockResolvedValue({ timestamp: new Date("2026-11-13"), regime: "RANGE" }), backtest: vi.fn() };
+  const hook = vi.fn().mockResolvedValue(undefined);
+  const output = { log: vi.fn(), table: vi.fn(), error: vi.fn() };
+  const command = () => createJobCommand("collect", service, async () => ["SPY"], output, hook).exitOverride();
+  await command().parseAsync([], { from: "user" });
+  expect(hook).toHaveBeenCalledWith([{ symbol: "SPY", timestamp: new Date("2026-11-13") }]);
+  hook.mockClear(); service.importHistory.mockResolvedValue(0);
+  await command().parseAsync([], { from: "user" }); expect(hook).not.toHaveBeenCalled();
+  service.importHistory.mockRejectedValue(new Error("Provider down"));
+  await expect(command().parseAsync([], { from: "user" })).rejects.toThrow(); expect(hook).not.toHaveBeenCalled();
+});
+it("uses the market calendar override for the previous session", async () => {
+  const service = { importHistory: vi.fn().mockResolvedValue(0), analyze: vi.fn(), backtest: vi.fn() };
+  const date = new Date("2026-11-13");
+  const command = createJobCommand("collect", service, async () => ["SPY"], { log: vi.fn(), table: vi.fn(), error: vi.fn() }, undefined, async () => date);
+  await command.parseAsync(["--last-day"], { from: "user" });
+  expect(service.importHistory).toHaveBeenCalledWith("SPY", date, date);
+});

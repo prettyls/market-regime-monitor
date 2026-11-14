@@ -20,7 +20,7 @@ export function registerAccess(app: FastifyInstance) {
       return;
     }
     reply.header("Cache-Control", "no-store");
-    // These routes enforce their own scoped bearer credentials.
+    // These routes enforce their own administrator-role bearer credentials and scopes.
     if (route.startsWith("/api/v1/agent/") || route.startsWith("/api/v1/trade-proposals")) return;
     const authorization = request.headers.authorization ?? "";
     const supplied = authorization.startsWith("Basic ") ? Buffer.from(authorization.slice(6), "base64").toString("utf8") : "";
