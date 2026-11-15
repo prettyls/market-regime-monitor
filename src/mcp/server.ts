@@ -32,7 +32,7 @@ export function createTradingMcpServer(config: AgentApiConfig, request: typeof f
       if (!response.ok) {
         await response.body?.cancel();
         const advice: Record<number, string> = {
-          400: "Invalid proposal input.", 401: "Check the MCP agent token.", 403: "Agent lacks the required API scope.",
+          400: "Invalid proposal input.", 401: "Check the MCP agent token.", 403: "Agent requires an explicit admin role and the required API scope; restart the API after updating credentials.",
           404: "Analysis or proposal not found, or proposal belongs to another agent.",
           409: "Idempotency conflict or concurrent request; retry the identical request with the same key.",
           422: "Policy rejected the proposal; check registered EQUITY/ETF symbol, allowlist, analysis age and budgets.",

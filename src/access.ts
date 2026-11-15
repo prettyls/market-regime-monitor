@@ -2,7 +2,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 
 const digest = (value: string) => createHash("sha256").update(value).digest();
-const publicRoutes = new Set(["/", "/analysis", "/health", "/api/v1/instruments", "/api/v1/analyses/latest", "/api/v1/instruments/:symbol/analysis", "/api/v1/alerts"]);
+const publicRoutes = new Set(["/calendar", "/api/v1/paper/calendar", "/", "/analysis", "/health", "/api/v1/instruments", "/api/v1/analyses/latest", "/api/v1/instruments/:symbol/analysis", "/api/v1/alerts"]);
 
 export function registerAccess(app: FastifyInstance) {
   const username = process.env.ADMIN_USERNAME ?? "admin";
