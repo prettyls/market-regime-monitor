@@ -145,3 +145,12 @@ calendar/quote validation, structured agent responses, collection failure gates,
 plan replay, single execution, failed decisions and report persistence. External
 OpenAI/Schwab calls are mocked in automated tests. Validate with a small paper
 account over multiple market sessions before drawing performance conclusions.
+
+## Performance-driven review
+
+Optional [rule and skill reviews](rule-reviews.md) run after closing reports.
+They record candidate revisions when results miss configured expectations;
+activation requires separate validation and administrator review. They are
+disabled by default. The report job now also needs the OpenAI secret/model when
+reviews are enabled; `configure-paper-trading.sh` binds these, and optionally
+binds `PAPER_REVIEW_JSON` through `PAPER_REVIEW_SECRET`.

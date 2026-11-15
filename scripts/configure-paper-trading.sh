@@ -14,8 +14,12 @@ if [[ ! "$PAPER_AGENT_MODEL" =~ ^[a-zA-Z0-9._:-]+$ ]]; then echo "Invalid model 
 for suffix in daily paper-execute paper-report; do
   job="${SERVICE_NAME}-${suffix}"
   args=(--project="$PROJECT_ID" --region="$REGION" --update-secrets="PAPER_TRADING_JSON=${PAPER_CONFIG_SECRET}:latest")
-  if [[ "$suffix" == daily ]]; then
+  if [[ "$suffix" == daily || "$suffix" == paper-report ]]; then
     args+=(--update-secrets="OPENAI_API_KEY=${OPENAI_KEY_SECRET}:latest" --update-env-vars="PAPER_AGENT_MODEL=${PAPER_AGENT_MODEL}")
+  fi
+  if [[ "$suffix" == paper-report && -n "${PAPER_REVIEW_SECRET:-}" ]]; then
+    if [[ ! "$PAPER_REVIEW_SECRET" =~ ^[a-zA-Z0-9_-]+$ ]]; then echo "Invalid review config secret name" >&2; exit 1; fi
+    args+=(--update-secrets="PAPER_REVIEW_JSON=${PAPER_REVIEW_SECRET}:latest")
   fi
   gcloud run jobs update "$job" "${args[@]}" --quiet
 done

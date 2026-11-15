@@ -57,3 +57,7 @@ load Codex skill files: it receives the structured rule source directly. MCP's
 standalone BUY simulations are independent of the scheduled portfolio and do
 not update cash or positions. See [MCP setup](mcp.md) and
 [scheduled paper workflow](paper-trading.md).
+
+For automatic diagnosis and proposed revisions after losses or missed targets,
+see [performance-driven rule/skill reviews](rule-reviews.md). Candidates do not
+change active rules or the installed skill without validation and activation.

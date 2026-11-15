@@ -43,6 +43,7 @@ export function registerTradingRoutes(app: FastifyInstance, db: PrismaClient) {
       mode: "PAPER", policy: paperConfig(), rules: tradingRules, accounts: await db.paperAccount.findMany(),
       runs: await db.paperRun.findMany({ orderBy: { createdAt: "desc" }, take: 20 }),
       reports: await db.paperReport.findMany({ orderBy: { session: "desc" }, take: 20 }),
+      reviews: await db.paperRuleReview.findMany({ orderBy: { createdAt: "desc" }, take: 20 }),
     }));
     routes.get("/api/v1/agent/portfolio/accounts", async () => readSchwab("accounts"));
     routes.get("/api/v1/agent/portfolio/orders", async () => readSchwab("orders"));

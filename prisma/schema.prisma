@@ -169,3 +169,17 @@ model PaperReport {
 
   @@unique([accountId, session])
 }
+
+model PaperRuleReview {
+  id          String   @id @default(cuid())
+  accountId   String
+  session     String
+  ruleVersion String
+  status      String
+  evidence    Json
+  proposal    Json
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([accountId, session, ruleVersion])
+}

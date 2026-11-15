@@ -14,6 +14,7 @@
     "daily": "tsx src/daily.ts",
     "paper:execute": "tsx src/paper-job.ts execute",
     "paper:report": "tsx src/paper-job.ts report",
+    "paper:review": "tsx src/paper-job.ts review",
     "backtest": "tsx src/backtest.ts",
     "cli": "tsx src/cli.ts",
     "schwab:oauth": "tsx scripts/schwab-oauth.ts",
