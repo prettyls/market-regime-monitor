@@ -7,6 +7,12 @@ Use the `market-regime-monitor` MCP connection. Read
 [references/workflows.md](references/workflows.md) for tool inputs and the
 separation between scheduled allocation and standalone proposals.
 
+For an authorized trading session, remain active from 09:30 to 16:00 on
+weekdays in `America/New_York`, subject to the exchange calendar and early
+closes. Follow the [session workflow](references/workflows.md#active-trading-session)
+for monitoring, resuming and end-of-session handoff. Skill text alone does not
+start or keep an agent process running.
+
 Read `get_paper_portfolio` for paper policy, current versioned rules, holdings,
 recent decisions and reports. Read `get_trading_context` for source analyses.
 Use the account ID and experiment named by the user; if several are returned
@@ -39,6 +45,10 @@ retry an uncertain result once with the same payload and key. If still uncertain
 stop submission attempts and report the unresolved status. Never generate a new
 key to work around a timeout, rejection or budget. An intentional new decision
 needs its own key. Stop on 401/403 and report the access issue.
+After reading the saved proposal, attempt the one-minute day-chart check in
+[references/workflows.md](references/workflows.md#post-proposal-one-minute-day-chart-check)
+and give an explicit follow-up trading decision; saving a proposal does not
+complete the decision workflow.
 
 MCP proposals are BUY/LIMIT/DAY simulations and do not update the scheduled
 paper ledger. There is no MCP tool for selling, submitting allocations to the
@@ -51,6 +61,11 @@ slippage assumptions, benchmark period and omitted dividends/corporate actions.
 A profitable short test is not evidence of dependable income.
 
 ## Performance feedback and revisions
+
+After a confirmed position close, review that trade against the rules and skill
+version used for entry and exit, and provide evidence-based feedback using
+[references/revisions.md](references/revisions.md#post-close-trade-review).
+A closing performance report alone does not confirm a position was closed.
 
 Use the `reviews` returned by `get_paper_portfolio` when asked to diagnose losses
 or missed expectations. Read [references/revisions.md](references/revisions.md).

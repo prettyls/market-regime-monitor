@@ -44,3 +44,39 @@ source and reviewed skill text, runs checks, then rebuilds/redeploys all affecte
 jobs. A rule change blocks same-session plans using the old rules. Start a new
 paper account to keep candidate performance separate. Installation and deployment
 require their normal filesystem/cloud permissions; a proposal grants none.
+
+
+## Post-close trade review
+
+When an observed execution record confirms a position has fully closed, provide
+feedback during that review even if the automated performance-window trigger
+has not fired. A partial reduction can receive interim feedback, but is not a
+completed-position review. A DAY proposal expiring, a SIMULATED proposal, or a
+session's closing report does not establish a round trip. If entry/exit records
+are unavailable, identify the missing evidence and mark the review incomplete.
+Use paper ledger records for paper trades; inspect real orders only within an
+authorized real-account review. Do not mix the two.
+
+Reconstruct the trade from saved evidence: instrument, entry/exit times and
+prices, quantity, cost basis, realized P/L and costs where available, exit
+reason, original thesis, rule/skill versions, and the post-proposal one-minute
+chart decision. Label estimates and missing costs. For multiple fills, use the
+ledger's cost-basis method rather than assuming a single entry price. Do not
+reconstruct entry-time evidence from data that arrived later.
+
+Assess entry eligibility, sizing/limits, intraday confirmation or missing data,
+and exit compliance against the rules in force at each decision. Separate
+rule violations, data/execution problems, and compliant trades with unfavorable
+outcomes. A winning trade can violate rules; a losing trade can follow them.
+If historical rule or skill versions are unavailable, say which compliance
+judgments remain unresolved.
+
+Return concise feedback with the outcome, what worked, what failed or remains
+unknown, and a concrete rule or skill improvement hypothesis when justified.
+Tie each suggestion to evidence and describe how to evaluate it on held-out or
+future paper trades; retain the current guidance when evidence is insufficient.
+Label suggestions PROPOSED / unvalidated. Link an existing account review when
+relevant, but do not claim that conversational feedback was persisted by MCP.
+This per-trade feedback does not bypass automated review windows or activate
+new thresholds, skills or rules. Apply the candidate validation and activation
+workflow above before changing trading behavior.

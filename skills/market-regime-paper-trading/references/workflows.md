@@ -5,6 +5,48 @@ All API-backed tools require a configured agent bearer credential with explicit
 separate mechanism. Never read `.env` to recover secrets as part of a trading
 review. Ask the operator to configure authentication when it is missing.
 
+## Active trading session
+
+The requested operating window is Monday–Friday, 09:30 inclusive to 16:00
+exclusive in `America/New_York`. Use that IANA timezone so daylight-saving
+changes do not shift the local window. Check the target exchange's session
+calendar for holidays, early closes and session status through an available
+authorized source; stop trading decisions at an earlier official close. If
+session status cannot be verified, report the gap and defer new trading action.
+Read-only preparation and post-close feedback may occur outside the window.
+
+A persistent agent worker or scheduler must own this lifecycle. When invoked
+without one, disclose that continuous coverage is unavailable; do not claim the
+agent will wake itself, remain alive after the turn ends, or has enabled a job.
+An active session authorizes monitoring within the selected paper account and
+existing trading scope; it does not add broker execution or unsupported tools.
+
+At session start (or a restart during the window), reload the account, policy,
+rule version, saved decisions and unresolved proposals. Reconcile completed
+work before taking new action. During the session, use a one-minute monitoring
+cadence when the runtime and data tools support it: inspect newly completed
+one-minute bars, reevaluate pending setups and held positions against the active
+rules, and perform the post-proposal chart check for new proposals. Being active
+does not require making a trade. HOLD is a valid decision; do not generate a
+new proposal on every tick or reprocess the same bar as new evidence.
+
+Keep a resumable checkpoint in the runtime's authorized state store: session
+and account reference, last processed bar, proposal IDs and idempotency keys,
+exact uncertain payloads, decisions, and completed close reviews. Avoid raw
+account identifiers in shared artifacts. Use one worker per account/session,
+or equivalent deduplication, to prevent overlapping invocations from duplicating
+decisions. After downtime, reconcile current state and skip missed ticks rather
+than submitting historical decisions in a burst. Preserve existing retry and
+authentication stopping conditions; report data outages and coverage gaps.
+
+When a position close is confirmed, perform the linked post-close review during
+the session rather than waiting for the end of the day. At the session boundary,
+stop new trading decisions and provide a handoff listing open positions,
+unresolved proposals, data gaps and feedback. Do not automatically liquidate
+positions or claim DAY simulations were canceled or filled; closing positions
+requires the applicable exit rules and a supported authorized execution path.
+Leave unresolved outcomes available for reconciliation at the next session.
+
 ## Inspect the scheduled paper experiment
 
 1. `get_paper_portfolio({})`: returns `policy`, `rules`, paper accounts, recent
@@ -60,6 +102,43 @@ Standalone proposals assume the submitted price and create no paper ledger fill.
 The scheduled strategy rules are enforced on scheduled allocations; standalone
 proposal routes enforce their own risk policy. Skill reasoning is not an
 additional server authorization control.
+
+## Post-proposal one-minute day-chart check
+
+After `propose_trade` and `get_trade_proposal`, try to fetch the target symbol's
+current-session day chart at **one-minute candle resolution** using an available,
+authorized market-data tool. This is a follow-up snapshot, not a recurring
+one-minute polling job by itself; repeated checks belong to the active-session
+runtime described above. Inspect available tool capabilities first: the current
+market-regime-monitor MCP has no intraday chart tool, and its REST price-history
+route supports daily bars only. If another authorized source is available, use
+it; otherwise record the missing capability and return HOLD / defer additional
+action. Do not substitute daily candles or manufacture an intraday observation.
+
+Record the source, symbol, session date/timezone, retrieval time, last completed
+bar timestamp, and whether data is delayed or includes extended hours. Exclude
+incomplete bars. Check that bars belong to the intended trading session, are
+ordered, and have no material gaps. Apply configured freshness limits; if none
+exist, disclose the observed age and do not claim freshness is policy-validated.
+An unavailable, stale, delayed beyond policy, wrong-session or conflicting chart
+supports HOLD pending usable evidence. Outside regular hours, identify the last
+session explicitly; do not label it a current executable signal.
+
+Compare the completed bars with the proposal thesis and active entry/exit rules:
+price relative to the proposed limit, intraday direction, range and volume where
+available. Use intraday evidence to assess timing and contradictions; do not
+invent a new indicator threshold or let it override regime/risk gates. Candle
+closes are historical trades, not executable bid/ask quotes.
+
+Report the proposal ID/status, chart evidence (or the exact data gap), applicable
+rule version, and a decision: retain the hypothetical setup, HOLD/defer further
+action, or recommend an exit if an existing position meets its exit rules.
+Explain what changed since the proposal and what would permit reconsideration.
+A follow-up decision does not amend, cancel or execute the saved simulation.
+Do not resubmit just because the chart changed. Any intentionally new proposal
+must remain within the user's authorization and use a new decision key; preserve
+the original proposal and its evidence. MCP cannot execute an exit or monitor
+positions in the background.
 
 ## Failure handling
 
