@@ -7,6 +7,15 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model SchwabTradeToken {
+  id           String   @id
+  seedHash     String
+  accessToken  String
+  refreshToken String
+  expiresAt    DateTime
+  updatedAt    DateTime @updatedAt
+}
+
 model Instrument {
   id             String          @id @default(cuid())
   symbol         String          @unique

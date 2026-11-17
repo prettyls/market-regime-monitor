@@ -1,4 +1,6 @@
+import { schwabCalendar } from "./trading/calendar.js";
 import { calendarHtml } from "./web/calendar.js";
+import { registerMcpHttp } from "./mcp/http.js";
 import { realizedCalendar } from "./paper/calendar.js";
 import { SchwabPortfolioError } from "./trading/schwab.js";
 import { registerAccess } from "./access.js";
@@ -18,11 +20,13 @@ export function buildApp() {
   void app.register(sensible);
   registerAccess(app);
   registerTradingRoutes(app, prisma);
+  registerMcpHttp(app);
   const providers = new ProviderRegistry();
   const service = new MarketService(prisma, providers, app.log);
   const newInstrumentPage = newInstrumentHtml(providers.names());
   app.get("/", async (_request, reply) => reply.type("text/html; charset=utf-8").send(uiHtml));
   app.get("/calendar", async (_request, reply) => reply.type("text/html; charset=utf-8").send(calendarHtml));
+  app.get("/api/v1/trading/calendar", async request => schwabCalendar(request.query));
   app.get("/api/v1/paper/calendar", async request => realizedCalendar(prisma, request.query));
   app.get("/admin", async (_request, reply) => reply.type("text/html; charset=utf-8").send(adminHtml));
   app.get("/analysis", async (_request, reply) => reply.type("text/html; charset=utf-8").send(analysisHtml));

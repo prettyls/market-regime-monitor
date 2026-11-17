@@ -124,6 +124,8 @@ update_args=(
 job_names=()
 if [[ "$SCHWAB_CONNECTION" == "market" ]]; then
   job_names=("${SERVICE_NAME}-collect" "${SERVICE_NAME}-daily" "${SERVICE_NAME}-backtest" "${SERVICE_NAME}-seed" "${SERVICE_NAME}-paper-execute" "${SERVICE_NAME}-paper-report")
+else
+  job_names=("${SERVICE_NAME}-refresh-trade-token")
 fi
 
 if [[ "$DRY_RUN" -eq 1 ]]; then

@@ -46,7 +46,7 @@ and simulation mode. It can contain multiple dates for an instrument; choose the
 intended analysis ID. Portfolio accounts include positions and balances; orders
 cover the trailing seven days. Schwab requests have a 15-second timeout, return
 sanitized upstream errors, and use only `SCHWAB_TRADE_ACCESS_TOKEN`. Market data uses its own `SCHWAB_MARKET_*` credentials; its refresh flow never
-updates trading credentials. Portfolio reads do not independently refresh trading tokens. Expired authorization requires renewal.
+updates trading credentials. With `SCHWAB_TRADE_TOKEN_STORE=database`, portfolio reads share persisted tokens with the scheduled refresh job and refresh near expiry. Otherwise they use the static trading access token. Expired refresh authorization requires OAuth renewal.
 
 Example proposal body:
 

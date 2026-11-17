@@ -7,7 +7,7 @@ import { z } from "zod";
 import { notionalUnits, policySchema, proposalSchema, validatePolicy } from "./policy.js";
 import { readSchwab } from "./schwab.js";
 
-const agentSchema = z.array(z.object({
+export const agentSchema = z.array(z.object({
   role: z.enum(["admin", "user"]).default("user"),
   id: z.string().min(1), token: z.string().min(32),
   scopes: z.array(z.enum(["analysis:read", "portfolio:read", "trades:propose"])),

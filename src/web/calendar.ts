@@ -10,18 +10,18 @@ export const calendarHtml = `<!doctype html>
 .day.today {outline:2px solid #2563eb} .amount {font-weight:650;overflow-wrap:anywhere}
 @media(max-width:600px){main{padding:10px}.day{padding:4px;min-height:78px;font-size:11px}.note{font-size:11px}}
 </style></head><body><header><h1>Realized P/L Calendar</h1><a href="/">Back to monitor</a></header>
-<main><section><h2>Paper trading · daily realized gains and losses</h2><p class="note">USD · America/New_York. Results appear on the trading date after its market-close report is saved. Includes trading fees and partial position closes. Open-position gains and losses are excluded.</p>
-<div class="controls"><button id="previous" aria-label="Previous month">←</button><label>Month<input id="month" type="month"></label><button id="next" aria-label="Next month">→</button><button id="refresh" class="secondary">Refresh</button></div>
-<p id="message" role="status" aria-live="polite"></p><h2 id="total"></h2><div id="calendar" class="calendar" aria-label="Daily realized profit and loss"></div><p class="note">— means no closing report is available. $0.00 means a completed report with no realized gain or loss.</p></section><section><h2>Aggregate realized gain/loss</h2><p class="note">Cumulative USD realized P/L from the first closing report through the selected month. Hover or focus a point for its date and total.</p><p id="chart-message" role="status"></p><div class="chart-scroll"><svg id="pnl-chart" viewBox="0 0 900 340" role="img" aria-label="Cumulative realized gain and loss over time"></svg></div></section></main>
+<main><section><h2>Author’s account · estimated realized gains and losses</h2><p class="note">USD · America/New_York. FIFO estimates from actual account transactions, including reported fees. Refreshes hourly. Open-position gains and losses are excluded.</p>
+<p id="coverage" class="note"></p><div class="controls"><button id="previous" aria-label="Previous month">←</button><label>Month<input id="month" type="month"></label><button id="next" aria-label="Next month">→</button><button id="refresh" class="secondary">Refresh</button></div>
+<p id="message" role="status" aria-live="polite"></p><h2 id="total"></h2><div id="calendar" class="calendar" aria-label="Daily realized profit and loss"></div><p class="note">— means no transaction data is available. Incomplete means cost basis or transaction support is missing. $0.00 means observed transactions produced no realized gain or loss.</p></section><section><h2>Aggregate realized gain/loss</h2><p class="note">Cumulative estimated USD realized P/L within the available transaction history through the selected month. Hover or focus a point for its date and total.</p><p id="chart-message" role="status"></p><div class="chart-scroll"><svg id="pnl-chart" viewBox="0 0 900 340" role="img" aria-label="Cumulative realized gain and loss over time"></svg></div></section></main>
 <script>
 (function(){
 var $=function(id){return document.getElementById(id)}, version=0;
 var today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 $('month').value=today.slice(0,7);
-function money(value){return new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',signDisplay:'exceptZero'}).format(Number(value));}
+function money(value){if(value===null)return 'Incomplete';return new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',signDisplay:'exceptZero'}).format(Number(value));}
 function node(tag,text,cls){var n=document.createElement(tag);n.textContent=text;if(cls)n.className=cls;return n;}
 function chart(series){
-var svg=$('pnl-chart');svg.replaceChildren();$('chart-message').textContent=series.length?'':'No closing reports available to chart.';
+series=series.filter(function(p){return p.realizedPnl!==null});var svg=$('pnl-chart');svg.replaceChildren();$('chart-message').textContent=series.length?'':'No complete transaction history available to chart.';
 if(!series.length)return;
 function shape(tag,attrs,text){var n=document.createElementNS('http://www.w3.org/2000/svg',tag);Object.keys(attrs).forEach(function(k){n.setAttribute(k,attrs[k]);});if(text!==undefined)n.textContent=text;svg.append(n);return n;}
 var values=series.map(function(p){return Number(p.realizedPnl)}), low=Math.min(0,...values), high=Math.max(0,...values);
@@ -40,16 +40,16 @@ shape('text',{x:480,y:326,'text-anchor':'middle'},'Time (trading date)');shape('
 }
 async function load(){
 var month=$('month').value;if(!/^\\d{4}-(0[1-9]|1[0-2])$/.test(month))return;
-var current=++version;$('message').textContent='Loading closing reports…';$('total').textContent='';$('calendar').replaceChildren();$('pnl-chart').replaceChildren();$('chart-message').textContent='Loading…';
-try{var response=await fetch('/api/v1/paper/calendar?month='+encodeURIComponent(month));if(!response.ok)throw new Error('Unable to load closing reports. Please try again.');var data=await response.json();if(current!==version)return;
+var current=++version;$('message').textContent='Loading account transactions…';$('total').textContent='';$('coverage').textContent='';$('calendar').replaceChildren();$('pnl-chart').replaceChildren();$('chart-message').textContent='Loading…';
+try{var response=await fetch('/api/v1/trading/calendar?month='+encodeURIComponent(month));if(!response.ok)throw new Error('Unable to load account P/L. Check administrator login, trading authorization and account configuration.');var data=await response.json();if(current!==version)return;
 var parts=month.split('-').map(Number), first=new Date(Date.UTC(parts[0],parts[1]-1,1)), count=new Date(Date.UTC(parts[0],parts[1],0)).getUTCDate();
 ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].forEach(function(d){$('calendar').append(node('div',d,'weekday'));});
 for(var blank=0;blank<first.getUTCDay();blank++)$('calendar').append(node('div',''));
-for(var day=1;day<=count;day++){var date=month+'-'+String(day).padStart(2,'0'), record=data.days.find(function(d){return d.date===date}), cell=node('div','','day'+(date===today?' today':''));cell.append(node('span',String(day)));cell.append(node('span',record?money(record.realizedPnl):'—','amount'+(record?(Number(record.realizedPnl)>0?' gain':Number(record.realizedPnl)<0?' loss':''):'')));if(record)cell.append(node('span',record.closingTrades+' closing trades','note'));cell.setAttribute('aria-label',date+': '+(record?money(record.realizedPnl):'No closing report'));$('calendar').append(cell);}
-chart(data.cumulativeSeries);
-$('total').textContent='Month realized P/L: '+money(data.totalRealizedPnl);$('message').textContent=data.days.length?'Published closing reports: '+data.days.length:'No closing reports for this month.';
+for(var day=1;day<=count;day++){var date=month+'-'+String(day).padStart(2,'0'), record=data.days.find(function(d){return d.date===date}), cell=node('div','','day'+(date===today?' today':''));cell.append(node('span',String(day)));cell.append(node('span',record?money(record.realizedPnl):'—','amount'+(record?(record.realizedPnl!==null && Number(record.realizedPnl)>0?' gain':record.realizedPnl!==null && Number(record.realizedPnl)<0?' loss':''):'')));if(record)cell.append(node('span',record.closingTrades+' closing trades','note'));cell.setAttribute('aria-label',date+': '+(record?money(record.realizedPnl):'No transaction data'));$('calendar').append(cell);}
+chart(data.cumulativeSeries);$('coverage').textContent='History starts '+data.historyStart+' · Updated '+data.updatedAt+'. '+data.warning;
+$('total').textContent='Month estimated realized P/L: '+money(data.totalRealizedPnl);$('message').textContent=data.days.length?'Days with observed transactions: '+data.days.length:'No observed transactions for this month.';
 }catch(error){if(current===version){$('message').textContent=error.message;$('chart-message').textContent='Chart unavailable. Please refresh to try again.';}}}
 function move(offset){var parts=$('month').value.split('-').map(Number), d=new Date(Date.UTC(parts[0],parts[1]-1+offset,1));$('month').value=d.toISOString().slice(0,7);load();}
-$('previous').onclick=function(){move(-1)};$('next').onclick=function(){move(1)};$('month').onchange=load;$('refresh').onclick=load;setInterval(load,60000);load();
+$('previous').onclick=function(){move(-1)};$('next').onclick=function(){move(1)};$('month').onchange=load;$('refresh').onclick=load;setInterval(load,3600000);load();
 })();
 </script></body></html>`;

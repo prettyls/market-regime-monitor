@@ -20,10 +20,28 @@ and the intended account is unclear, inspect them read-only and ask which to use
 before proposing a mutation. Portfolio outputs are private: summarize only what
 the task needs and never put tokens or raw account identifiers in artifacts.
 
+The trading account seeks short-term gains from market signals, rather than
+long-term investing or passive buy-and-hold allocation. Evaluate entries against
+the current signal and plan an exit when that thesis expires or reverses under
+the configured rules. Do not invent a fixed holding period or profit target.
+
+The account does not support T+0: never recommend or submit a same-day round
+trip. A position opened in one exchange trading session is eligible to close
+no earlier than the next trading session, subject to other account constraints.
+Verify entry fills and their exchange-local session dates before recommending
+an exit; an order submission or DAY expiration is not an entry fill. If entry
+dates or eligible quantities are unknown, defer the exit and report the gap.
+For mixed-date lots, use verified lot-level eligibility; otherwise defer the
+reduction. Intraday monitoring does not authorize same-day liquidation. If an
+exit signal occurs on the entry day, report the signal and blocked exit, then
+reassess at the next eligible session. Do not bypass the restriction for a stop,
+a bearish signal, or a session close. Flag conflicting server rules for operator
+resolution; skill text does not add engine-level enforcement.
+
 Apply the returned rules and server limits. Increase a paper allocation only
 when the target instrument's regime, signed score and heuristic confidence meet
-the configured entry criteria. Honor bearish exits and avoid new allocation in
-other regimes. Do not treat confidence as a probability, invert a VIX signal
+the configured entry criteria. Honor bearish exits when the holding is eligible
+under the no-T+0 rule, and avoid new allocation in other regimes. Do not treat confidence as a probability, invert a VIX signal
 into an equity instruction, or introduce an unconfigured strategy mapping.
 Missing, stale or conflicting inputs justify HOLD, not invented evidence.
 

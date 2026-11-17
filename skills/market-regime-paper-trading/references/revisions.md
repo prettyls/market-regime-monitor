@@ -65,8 +65,11 @@ ledger's cost-basis method rather than assuming a single entry price. Do not
 reconstruct entry-time evidence from data that arrived later.
 
 Assess entry eligibility, sizing/limits, intraday confirmation or missing data,
-and exit compliance against the rules in force at each decision. Separate
-rule violations, data/execution problems, and compliant trades with unfavorable
+and exit compliance against the rules in force at each decision. Check the
+short-term signal thesis and verify entry/exit exchange-session dates against
+the no-T+0 restriction; mark a same-day round trip as a violation regardless
+of profit. Do not propose relaxing this account constraint to improve returns.
+Separate rule violations, data/execution problems, and compliant trades with unfavorable
 outcomes. A winning trade can violate rules; a losing trade can follow them.
 If historical rule or skill versions are unavailable, say which compliance
 judgments remain unresolved.

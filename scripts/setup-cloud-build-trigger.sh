@@ -26,6 +26,8 @@ CONNECTION=${CONNECTION:-github}
 REPO_ID=${REPO_ID:-market-regime-monitor}
 REMOTE_URI=${REMOTE_URI:-https://github.com/prettyls/market-regime-monitor.git}
 TRIGGER=${TRIGGER:-market-regime-monitor-main}
+CREDENTIAL_SECRET_PREFIX=${CREDENTIAL_SECRET_PREFIX:-none}
+TRADE_REFRESH_ENABLED=${TRADE_REFRESH_ENABLED:-false}
 
 if [[ "$VPC_CONNECTOR" == *'~'* || "$VPC_NETWORK" == *'~'* || "$VPC_SUBNET" == *'~'* || "$DATABASE_SECRET" == *'~'* ]]; then
   echo "VPC_CONNECTOR, VPC_NETWORK, VPC_SUBNET, and DATABASE_SECRET cannot contain '~'." >&2
@@ -94,6 +96,13 @@ grant_project_role roles/run.admin
 grant_project_role roles/logging.logWriter
 grant_project_role roles/artifactregistry.writer
 grant_project_role roles/cloudscheduler.admin
+
+# Manual source uploads are stored here; the dedicated deployer must read them.
+# gcloud builds submit creates this bucket on the first manual submission.
+if gcloud storage buckets describe "gs://${PROJECT_ID}_cloudbuild" --project="$PROJECT_ID" >/dev/null 2>&1; then
+  gcloud storage buckets add-iam-policy-binding "gs://${PROJECT_ID}_cloudbuild" \
+    --member="serviceAccount:${deployer_sa}" --role=roles/storage.objectViewer --quiet >/dev/null
+fi
 
 # Let Cloud Build run the deployer, and let the deployer act as the runtime identity.
 service_agent="service-${project_number}@gcp-sa-cloudbuild.iam.gserviceaccount.com"
@@ -175,20 +184,13 @@ if ! gcloud builds repositories describe "$REPO_ID" \
 fi
 
 repo_resource="projects/${PROJECT_ID}/locations/${REGION}/connections/${CONNECTION}/repositories/${REPO_ID}"
-substitutions="^~^_VPC_CONNECTOR=${VPC_CONNECTOR}~_VPC_NETWORK=${VPC_NETWORK}~_VPC_SUBNET=${VPC_SUBNET}~_REGION=${REGION}~_REPOSITORY=${REPOSITORY}~_SERVICE_NAME=${SERVICE_NAME}~_SERVICE_ACCOUNT_ID=${SERVICE_ACCOUNT_ID}~_DATABASE_SECRET=${DATABASE_SECRET}~_SECRET_VERSION=${SECRET_VERSION}~_VPC_EGRESS=${VPC_EGRESS}"
+substitutions="^~^_VPC_CONNECTOR=${VPC_CONNECTOR}~_VPC_NETWORK=${VPC_NETWORK}~_VPC_SUBNET=${VPC_SUBNET}~_REGION=${REGION}~_REPOSITORY=${REPOSITORY}~_SERVICE_NAME=${SERVICE_NAME}~_SERVICE_ACCOUNT_ID=${SERVICE_ACCOUNT_ID}~_DATABASE_SECRET=${DATABASE_SECRET}~_SECRET_VERSION=${SECRET_VERSION}~_VPC_EGRESS=${VPC_EGRESS}~_CREDENTIAL_SECRET_PREFIX=${CREDENTIAL_SECRET_PREFIX}~_TRADE_REFRESH_ENABLED=${TRADE_REFRESH_ENABLED}"
 
 if gcloud builds triggers describe "$TRIGGER" --project="$PROJECT_ID" --region="$REGION" >/dev/null 2>&1; then
   echo "Updating trigger ${TRIGGER}"
-  gcloud builds triggers update github "$TRIGGER" \
-    --project="$PROJECT_ID" \
-    --region="$REGION" \
-    --repository="$repo_resource" \
-    --branch-pattern='^main$' \
-    --build-config=cloudbuild.yaml \
-    --include-logs-with-status \
-    --service-account="projects/${PROJECT_ID}/serviceAccounts/${deployer_sa}" \
-    --description='Build and deploy market-regime-monitor on each push to main' \
-    --update-substitutions="$substitutions"
+  node "$(dirname "$0")/update-cloud-build-trigger.mjs" \
+    "$PROJECT_ID" "$REGION" "$TRIGGER" "$repo_resource" \
+    "projects/${PROJECT_ID}/serviceAccounts/${deployer_sa}" "$substitutions"
 else
   echo "Creating trigger ${TRIGGER}"
   gcloud builds triggers create github \

@@ -2,7 +2,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 
 const digest = (value: string) => createHash("sha256").update(value).digest();
-const publicRoutes = new Set(["/calendar", "/api/v1/paper/calendar", "/", "/analysis", "/health", "/api/v1/instruments", "/api/v1/analyses/latest", "/api/v1/instruments/:symbol/analysis", "/api/v1/alerts"]);
+const publicRoutes = new Set(["/api/v1/paper/calendar", "/", "/analysis", "/health", "/api/v1/instruments", "/api/v1/analyses/latest", "/api/v1/instruments/:symbol/analysis", "/api/v1/alerts"]);
 
 export function registerAccess(app: FastifyInstance) {
   const username = process.env.ADMIN_USERNAME ?? "admin";
@@ -21,7 +21,7 @@ export function registerAccess(app: FastifyInstance) {
     }
     reply.header("Cache-Control", "no-store");
     // These routes enforce their own administrator-role bearer credentials and scopes.
-    if (route.startsWith("/api/v1/agent/") || route.startsWith("/api/v1/trade-proposals")) return;
+    if (route === "/mcp" || route.startsWith("/api/v1/agent/") || route.startsWith("/api/v1/trade-proposals")) return;
     const authorization = request.headers.authorization ?? "";
     const supplied = authorization.startsWith("Basic ") ? Buffer.from(authorization.slice(6), "base64").toString("utf8") : "";
     if (!password || !timingSafeEqual(digest(supplied), digest(`${username}:${password}`))) {

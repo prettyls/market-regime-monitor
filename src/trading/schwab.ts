@@ -1,3 +1,4 @@
+import { tradeAccessToken } from "./token.js";
 /** Only fixed, application-owned messages may be exposed to API callers. */
 export class SchwabPortfolioError extends Error {
   constructor(readonly code: string, message: string, readonly statusCode = 502) {
@@ -8,16 +9,23 @@ export class SchwabPortfolioError extends Error {
 
 // Deliberately read-only: no broker mutation method is exposed in this milestone.
 export async function readSchwab(path: "accounts" | "orders"): Promise<unknown> {
-  const token = process.env.SCHWAB_TRADE_ACCESS_TOKEN;
-  if (!token) throw new SchwabPortfolioError("SCHWAB_AUTH_UNAVAILABLE", "Schwab authorization unavailable; configure credentials and restart the server", 503);
   const query = path === "accounts" ? "?fields=positions" : (() => {
     const end = new Date();
     const start = new Date(end.getTime() - 7 * 86400000);
     return `?fromEnteredTime=${encodeURIComponent(start.toISOString())}&toEnteredTime=${encodeURIComponent(end.toISOString())}`;
   })();
+  return readSchwabResource(`${path}${query}`);
+}
+
+// Resource paths are constructed only by server-owned read-only adapters.
+export async function readSchwabResource(resource: string): Promise<unknown> {
+  let token: string | undefined;
+  try { token = await tradeAccessToken(); }
+  catch { throw new SchwabPortfolioError("SCHWAB_AUTH_UNAVAILABLE", "Schwab trading authorization refresh unavailable; check token refresh job", 503); }
+  if (!token) throw new SchwabPortfolioError("SCHWAB_AUTH_UNAVAILABLE", "Schwab authorization unavailable; configure credentials and restart the server", 503);
   let response: Response;
   try {
-    response = await fetch(`https://api.schwabapi.com/trader/v1/${path}${query}`, {
+    response = await fetch(`https://api.schwabapi.com/trader/v1/${resource}`, {
       headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(15000),
     });
   } catch {

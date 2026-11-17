@@ -20,12 +20,13 @@ it("publishes only reported sessions and totals daily realized P/L precisely", a
   expect(db.paperRun.findMany.mock.calls[0]).toEqual([{ where: expect.objectContaining({ status: "EXECUTED", session: { in: result.days.map(d => d.date) } }), select: { session: true, execution: true } }]);
   await expect(realizedCalendar(db as any, { month: "2026-13" })).rejects.toThrow();
 });
-it("opens the calendar and data without administrator credentials", async () => {
+it("protects the actual-account calendar while retaining the public paper data endpoint", async () => {
   const app = Fastify();
   registerAccess(app);
   app.get('/calendar', async () => calendarHtml);
   app.get('/api/v1/paper/calendar', async () => ({ days: [] }));
-  for (const url of ['/calendar', '/api/v1/paper/calendar?month=2026-11']) expect((await app.inject(url)).statusCode).toBe(200);
+  expect((await app.inject('/calendar')).statusCode).toBe(401);
+  expect((await app.inject('/api/v1/paper/calendar?month=2026-11')).statusCode).toBe(200);
   expect(uiHtml).toContain('href="/calendar"');
   expect(() => new Script(calendarHtml.match(/<script>([\s\S]*?)<\/script>/)![1]!)).not.toThrow();
   await app.close();
@@ -47,4 +48,19 @@ it("carries prior months into the chart while keeping calendar totals monthly", 
     { date: "2026-11-02", realizedPnl: "75.0000" },
   ]);
   expect(db.paperReport.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ session: { lte: "2026-11-31" } }) }));
+});
+
+it("requires admin authentication and disables caching for actual-account P/L", async () => {
+  vi.stubEnv("ADMIN_PASSWORD", "calendar-test-password-12345678901234567890");
+  const app = Fastify();
+  try {
+    registerAccess(app);
+    const handler = vi.fn(async () => ({ simulated: false, totalRealizedPnl: "1.0000" }));
+    app.get('/api/v1/trading/calendar', handler);
+    expect((await app.inject('/api/v1/trading/calendar?month=2026-11')).statusCode).toBe(401);
+    expect(handler).not.toHaveBeenCalled();
+    const response = await app.inject({ url: '/api/v1/trading/calendar?month=2026-11', headers: { authorization: `Basic ${Buffer.from(`admin:${process.env.ADMIN_PASSWORD}`).toString('base64')}` } });
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['cache-control']).toBe('no-store');
+  } finally { await app.close(); vi.unstubAllEnvs(); }
 });

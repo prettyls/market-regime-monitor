@@ -23,8 +23,10 @@ existing trading scope; it does not add broker execution or unsupported tools.
 
 At session start (or a restart during the window), reload the account, policy,
 rule version, saved decisions and unresolved proposals. Reconcile completed
-work before taking new action. During the session, use a one-minute monitoring
-cadence when the runtime and data tools support it: inspect newly completed
+work before taking new action. Reconcile entry fills, exchange-local entry
+sessions and quantities eligible to close under the no-T+0 rule. Do not infer
+eligibility from aggregate holdings or a saved proposal. During the session,
+use a one-minute monitoring cadence when the runtime and data tools support it: inspect newly completed
 one-minute bars, reevaluate pending setups and held positions against the active
 rules, and perform the post-proposal chart check for new proposals. Being active
 does not require making a trade. HOLD is a valid decision; do not generate a
@@ -132,7 +134,10 @@ closes are historical trades, not executable bid/ask quotes.
 
 Report the proposal ID/status, chart evidence (or the exact data gap), applicable
 rule version, and a decision: retain the hypothetical setup, HOLD/defer further
-action, or recommend an exit if an existing position meets its exit rules.
+action, or recommend an exit if an existing position meets its exit rules and
+its verified quantity is eligible under the no-T+0 restriction. A reversal on
+the entry day requires reporting a blocked exit and next-session reassessment,
+not a same-day sale.
 Explain what changed since the proposal and what would permit reconsideration.
 A follow-up decision does not amend, cancel or execute the saved simulation.
 Do not resubmit just because the chart changed. Any intentionally new proposal

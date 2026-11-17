@@ -105,8 +105,7 @@ Use the end-to-end REST setup to ensure the analysis, target instrument and
 policy exist first. `npm test` exercises tool discovery, calls and validation
 through an MCP client/server transport, as well as API policy tests.
 
-This is a local stdio bridge to a local or remote API. It does not expose a
-remote Streamable HTTP `/mcp` endpoint, and it adds no live trading capabilities.
+This is a local stdio bridge to a local or remote API. The API also exposes a remote Streamable HTTP `/mcp` endpoint as described below. Neither transport adds live trading capabilities.
 
 ### Inspector environment troubleshooting
 
@@ -134,3 +133,22 @@ return 401. These bearer credentials delegate admin access only to their listed
 scopes; the browser's Basic admin login does not replace them. MCP uses the same
 server-side role checks. The stdio adapter exposes no listening network port.
 After updating roles, restart the API to apply configuration.
+
+## Direct cloud connection
+
+Cloud Run also supports authenticated Streamable HTTP at:
+
+```text
+https://YOUR_CLOUD_RUN_SERVICE/mcp
+```
+
+Configure an HTTP MCP client with that URL and
+`Authorization: Bearer YOUR_SCOPED_AGENT_TOKEN`. Each request requires a configured
+admin-role agent token; every tool still passes through the REST scope checks.
+The server is stateless and can run across Cloud Run replicas without session
+stickiness. It accepts POST requests and returns JSON; standalone GET streams
+and DELETE sessions return 405. Clients must advertise both `application/json`
+and `text/event-stream` in `Accept`. Browser origins must match the service origin.
+No OAuth discovery or interactive MCP login is provided; use a client supporting
+an explicitly configured bearer header. See [cloud deployment](cloud-run.md#cloud-mcp-and-separate-trading-token-refresh)
+for secret bindings and token-refresh setup.

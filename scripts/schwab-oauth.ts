@@ -18,6 +18,8 @@ const readNonEmpty = (...values: Array<string | undefined>): string | undefined 
 };
 
 const args = process.argv.slice(2);
+// pnpm can forward the npm-style separator to the script unchanged.
+if (args[0] === "--") args.shift();
 const connection = args[0];
 if (connection !== "market" && connection !== "trade") {
   console.error("Usage: npm run schwab:oauth -- <market|trade> <url|full-redirect-url>");
@@ -55,6 +57,9 @@ const updateEnvFile = (values: Record<string, string>): void => {
 };
 
 const parseCodeAndState = (input: string): { code: string; state?: string } => {
+  if (input.trim().startsWith("[")) {
+    throw new Error("Paste the plain redirect URL from the browser address bar, not a Markdown [label](URL) link. Keep it in single quotes without backslashes before &.");
+  }
   try {
     const url = new URL(input);
     const code = url.searchParams.get("code");
@@ -64,7 +69,7 @@ const parseCodeAndState = (input: string): { code: string; state?: string } => {
     if (error) {
       throw new Error(`Schwab returned an OAuth error: ${error}${errorDescription ? ` - ${errorDescription}` : ""}`);
     }
-    if (!code) throw new Error(`No "code" query parameter found in: ${input}`);
+    if (!code) throw new Error('No "code" query parameter found in the redirect URL');
     return { code, state };
   } catch (err) {
     if (err instanceof TypeError) {

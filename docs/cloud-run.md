@@ -166,3 +166,75 @@ References: [Cloud Run public access](https://docs.cloud.google.com/run/docs/aut
 
 The deployment also creates paper execution and report jobs/schedulers. See
 [scheduled paper trading](paper-trading.md) for secret setup and behavior.
+
+## Cloud MCP and separate trading-token refresh
+
+The API now serves stateless Streamable HTTP MCP at `/mcp`. It uses the same
+administrator-role bearer credentials and per-tool scopes as the REST agent
+API. No browser Basic password or Schwab token is accepted as an MCP credential.
+The existing stdio adapter remains supported.
+
+Prepare named secrets from `.env` without putting their values in shell arguments:
+
+```bash
+PROJECT_ID=your-project-id node scripts/setup-cloud-credentials.mjs
+```
+
+This uploads the market and trading credentials and `AGENT_CREDENTIALS_JSON`,
+preserves the running service's database URL in `market-regime-runtime-database`,
+and grants the runtime and deployer identities access to these individual secrets.
+It preserves the administrator password already bound to the service. The helper
+requires an existing service and the `market-regime-deployer` service account.
+
+Deploy with these bindings:
+
+```bash
+PROJECT_ID=your-project-id \
+DATABASE_SECRET=market-regime-runtime-database \
+CREDENTIAL_SECRET_PREFIX=market-regime \
+TRADE_REFRESH_ENABLED=true \
+bash scripts/deploy-cloud-run.sh
+```
+
+Use `TRADE_REFRESH_ENABLED=true` only after the trade refresh token is present.
+The deploy creates `${SERVICE_NAME}-refresh-trade-token` and a matching Scheduler
+job (`*/20 * * * *`). The schedule stays paused when refresh is disabled. With
+refresh enabled, the API and job use `SCHWAB_TRADE_TOKEN_STORE=database`; token
+responses, including rotated refresh tokens, are persisted in PostgreSQL under
+an advisory lock. API reads reuse the shared access token and refresh it near
+expiry. Changing the configured refresh token replaces the stored authorization
+on the next refresh. Only trading credentials are used; market token behavior is
+unchanged. Refresh failure requires checking the job logs and renewing OAuth
+consent when necessary; the schedule cannot replace interactive authorization.
+
+After the deploy, verify the job explicitly:
+
+```bash
+gcloud run jobs execute market-regime-monitor-refresh-trade-token \
+  --project="$PROJECT_ID" --region=us-east4 --wait
+```
+
+For merge deployments, pass the same `DATABASE_SECRET`,
+`CREDENTIAL_SECRET_PREFIX`, and `TRADE_REFRESH_ENABLED` values when running
+`setup-cloud-build-trigger.sh`, so later releases retain those settings.
+
+## Actual Schwab P/L calendar
+
+`/calendar` and `/api/v1/trading/calendar?month=YYYY-MM` require administrator
+Basic authentication and send `Cache-Control: no-store`. The calendar loads on
+opening, on manual Refresh/month navigation, and every hour while open. It reads
+actual Schwab transactions with the separate trading credentials; new results
+require no code push, paper closing report or scheduled paper job.
+
+If exactly one account is linked, it is selected automatically. Otherwise set
+`SCHWAB_TRADE_ACCOUNT_HASH` on the API service to the intended linked account's
+encrypted identifier. No account identifier is returned by the calendar.
+
+Results are explicitly labeled FIFO estimates for observed long-equity trades,
+using net transaction cash amounts including reported fees. The lookback is 364
+days; it is not a permanent since-inception ledger. Missing opening lots,
+transfers, unsupported instruments and corrections make affected results
+incomplete rather than fabricate a zero. The chart stops at the first incomplete
+cumulative result. Broker tax-lot elections, wash sales and corporate actions
+can differ from these estimates. History coverage and retrieval time are shown.
+The original `/api/v1/paper/calendar` remains a separate paper-only endpoint.
