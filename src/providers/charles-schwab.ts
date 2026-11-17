@@ -55,6 +55,20 @@ export class CharlesSchwabProvider implements MarketDataProvider {
           await config.onTokenUpdate?.(nextToken);
         },
       });
+      // The installed SDK returns an in-memory token without checking its expiry.
+      // Check the actual saved expiry before every request, sharing one refresh.
+      const getAccessToken = auth.getAccessToken.bind(auth);
+      let pending: Promise<string | null> | undefined;
+      auth.getAccessToken = () => {
+        if (pending) return pending;
+        pending = (async () => {
+          if (currentToken.refreshToken && currentToken.expiresAt !== undefined && currentToken.expiresAt <= Date.now() + 120_000) {
+            await auth.refreshIfNeeded({ force: true, refreshToken: currentToken.refreshToken });
+          }
+          return getAccessToken();
+        })().finally(() => { pending = undefined; });
+        return pending;
+      };
       const client = createApiClient({ auth });
       return {
         marketData: {

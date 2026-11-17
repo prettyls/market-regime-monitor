@@ -148,3 +148,28 @@ describe("ProviderRegistry", () => {
     expect(() => new ProviderRegistry()).toThrow("SCHWAB_MARKET_REFRESH_TOKEN requires SCHWAB_MARKET_CLIENT_ID and SCHWAB_MARKET_CLIENT_SECRET");
   });
 });
+
+it("refreshes market credentials again after expiry and shares concurrent refreshes", async () => {
+  let clock = Date.parse("2026-11-17T15:00:00Z"), refreshes = 0;
+  const now = vi.spyOn(Date, "now").mockImplementation(() => clock);
+  const update = vi.fn();
+  const fetchMock = vi.fn<typeof fetch>(async input => {
+    const url = input instanceof Request ? input.url : String(input);
+    if (url.includes('/oauth/token')) {
+      refreshes++;
+      return Response.json({ access_token: `access-${refreshes}`, refresh_token: `refresh-${refreshes}`, expires_in: 1800, token_type: "Bearer" });
+    }
+    return Response.json({ symbol: "SPY", empty: false, candles: [{ datetime: clock, open: 100, high: 102, low: 99, close: 101, volume: 100 }] });
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  try {
+    const provider = new CharlesSchwabProvider({ accessToken: "expired", refreshToken: "seed", clientId: "client", clientSecret: "secret", onTokenUpdate: update });
+    await provider.fetchHistory({ symbol: "SPY", interval: "1d" });
+    const initial = refreshes;
+    expect(initial).toBeGreaterThan(0);
+    clock += 31 * 60_000;
+    await Promise.all([provider.fetchHistory({ symbol: "SPY", interval: "1d" }), provider.fetchHistory({ symbol: "SPY", interval: "1d" })]);
+    expect(refreshes).toBe(initial + 1);
+    expect(update).toHaveBeenLastCalledWith(expect.objectContaining({ accessToken: `access-${refreshes}`, refreshToken: `refresh-${refreshes}` }));
+  } finally { now.mockRestore(); vi.unstubAllGlobals(); }
+});
