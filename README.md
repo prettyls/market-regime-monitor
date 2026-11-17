@@ -19,11 +19,11 @@ Environment variables are loaded automatically from `.env` at startup.
 
 Environment:
 - `DATA_PROVIDER` selects the collection proposition (`schawb` is the default; `stooq` is also supported).
-- `SCHWAB_ACCESS_TOKEN` is required when the configured provider is Schwab.
+- `SCHWAB_MARKET_ACCESS_TOKEN` is required when the configured provider is Schwab.
 - Optional automatic refresh variables:
-  - `SCHWAB_REFRESH_TOKEN`
-  - `CLIENT_ID`/`CLIENT_SECRET` (or `SCHWAB_CLIENT_ID`/`SCHWAB_CLIENT_SECRET`)
-  - `SCHWAB_REDIRECT_URI` (defaults to `http://localhost`)
+  - `SCHWAB_MARKET_REFRESH_TOKEN`
+  - `SCHWAB_MARKET_CLIENT_ID`/`SCHWAB_MARKET_CLIENT_SECRET`
+  - `SCHWAB_MARKET_REDIRECT_URI` (defaults to `http://localhost`)
 - API base URLs are resolved internally from proposition mappings.
 
 ### Schwab token setup and rotation
@@ -32,23 +32,23 @@ Environment:
 2. Export the current access token into this service:
 
 ```bash
-export SCHWAB_ACCESS_TOKEN="YOUR_CURRENT_ACCESS_TOKEN"
+export SCHWAB_MARKET_ACCESS_TOKEN="YOUR_CURRENT_ACCESS_TOKEN"
 ```
 
 3. To enable automatic refresh, also configure:
 
 ```bash
-export SCHWAB_REFRESH_TOKEN="YOUR_CURRENT_REFRESH_TOKEN"
-export CLIENT_ID="YOUR_SCHWAB_APP_CLIENT_ID"
-export CLIENT_SECRET="YOUR_SCHWAB_APP_CLIENT_SECRET"
+export SCHWAB_MARKET_REFRESH_TOKEN="YOUR_CURRENT_REFRESH_TOKEN"
+export SCHWAB_MARKET_CLIENT_ID="YOUR_SCHWAB_APP_CLIENT_ID"
+export SCHWAB_MARKET_CLIENT_SECRET="YOUR_SCHWAB_APP_CLIENT_SECRET"
 ```
 
 4. Persist these values in your local `.env`, then restart long-running processes (`npm run dev`, API container, or scheduled jobs).
 
 Notes:
-- This service does not perform interactive login; you still need an initial token pair (`SCHWAB_ACCESS_TOKEN` + `SCHWAB_REFRESH_TOKEN`) from your OAuth workflow.
+- This service does not perform interactive login; you still need an initial token pair (`SCHWAB_MARKET_ACCESS_TOKEN` + `SCHWAB_MARKET_REFRESH_TOKEN`) from your OAuth workflow.
 - When refresh is configured, the app refreshes the access token and keeps the `expires_in` value from Schwab's token response in memory for the running process.
-- If refresh is not configured, rotate `SCHWAB_ACCESS_TOKEN` manually.
+- If refresh is not configured, rotate `SCHWAB_MARKET_ACCESS_TOKEN` manually.
 
 Quick token health check (minimal API call):
 
@@ -250,3 +250,22 @@ Schwab accounts/orders, immutable proposal snapshots, policy checks, shared dail
 simulation limits, and audit events. It performs **simulation only** and never
 submits broker orders. Access is disabled until configured. Apply the new Prisma
 migration before use. See [agent trading setup and API](docs/agent-trading.md).
+
+## MCP agents
+
+MCP-compatible agents can launch the stdio adapter to read trading context and
+Schwab portfolios and submit simulated proposals through the existing API.
+Build with `npm run build`, then configure your host to run
+`node /absolute/path/to/dist/src/mcp.js` with `MCP_API_URL` and
+`MCP_AGENT_TOKEN`. See [MCP setup and tools](docs/mcp.md).
+
+## Scheduled paper portfolio
+
+The daily Cloud Run workflow can now run an AI allocation agent after successful
+collection and analysis. Separate jobs execute paper allocations at 09:35 Eastern
+and record closing performance at 16:15. Weekday schedules and market-calendar
+checks apply. Paper trading defaults to disabled and never submits broker orders.
+See [paper workflow configuration and testing](docs/paper-trading.md).
+
+Versioned strategy rules and the reusable Codex skill are documented in
+[agent trading rules](docs/trading-rules.md).

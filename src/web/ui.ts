@@ -50,7 +50,7 @@ ${baseStyles}
 </head>
 <body>
 <div id="token-bar" hidden role="progressbar" aria-label="Access token time remaining"><div id="token-fill"></div><span id="token-label"></span></div>
-<header><h1>Market Regime Monitor</h1>${details ? '<a href="/">Back to monitor</a>' : admin ? '<a href="/instruments/new">Add instrument</a>' : '<a href="/admin">Admin</a>'}</header>
+<header><h1>Market Regime Monitor</h1>${details ? '<a href="/">Back to monitor</a>' : admin ? '<a href="/instruments/new">Add instrument</a>' : '<nav><a href="/calendar">P/L calendar</a> · <a href="/admin">Admin</a></nav>'}</header>
 <main>
   ${details ? '<section><h2 id="instrument-heading">Analysis details</h2><p id="message"></p><select id="symbol" hidden></select></section>' : `<section>
     <h2>${admin ? "Run" : "Browse analyses"}</h2>

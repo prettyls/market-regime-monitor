@@ -1,3 +1,8 @@
+import { schwabCalendar } from "./trading/calendar.js";
+import { calendarHtml } from "./web/calendar.js";
+import { registerMcpHttp } from "./mcp/http.js";
+import { realizedCalendar } from "./paper/calendar.js";
+import { SchwabPortfolioError } from "./trading/schwab.js";
 import { registerAccess } from "./access.js";
 import { registerTradingRoutes } from "./trading/routes.js";
 import sensible from "@fastify/sensible";
@@ -15,10 +20,14 @@ export function buildApp() {
   void app.register(sensible);
   registerAccess(app);
   registerTradingRoutes(app, prisma);
+  registerMcpHttp(app);
   const providers = new ProviderRegistry();
   const service = new MarketService(prisma, providers, app.log);
   const newInstrumentPage = newInstrumentHtml(providers.names());
   app.get("/", async (_request, reply) => reply.type("text/html; charset=utf-8").send(uiHtml));
+  app.get("/calendar", async (_request, reply) => reply.type("text/html; charset=utf-8").send(calendarHtml));
+  app.get("/api/v1/trading/calendar", async request => schwabCalendar(request.query));
+  app.get("/api/v1/paper/calendar", async request => realizedCalendar(prisma, request.query));
   app.get("/admin", async (_request, reply) => reply.type("text/html; charset=utf-8").send(adminHtml));
   app.get("/analysis", async (_request, reply) => reply.type("text/html; charset=utf-8").send(analysisHtml));
   app.get("/api/v1/analyses/latest", async () => {
@@ -41,7 +50,7 @@ export function buildApp() {
   app.get("/api/v1/signals/:symbol", async (request) => { const analysis = await prisma.analysis.findFirst({ where: { instrument: { symbol: (request.params as { symbol: string }).symbol.toUpperCase() } }, orderBy: { timestamp: "desc" }, select: { timestamp: true, regime: true, score: true, confidence: true, signals: true } }); return analysis ?? app.httpErrors.notFound("No analysis found"); });
   app.get("/api/v1/alerts", async (request) => { const query = alertQuerySchema.parse(request.query); return prisma.alert.findMany({ where: { ...(query.symbol ? { instrument: { symbol: query.symbol.toUpperCase() } } : {}), ...(query.severity ? { severity: query.severity } : {}) }, include: { instrument: { select: { symbol: true } } }, orderBy: { timestamp: "desc" }, take: query.limit }); });
   app.get("/api/v1/instruments/:symbol/backtest", async (request) => service.backtest((request.params as { symbol: string }).symbol));
-  app.setErrorHandler((error: FastifyError, _request, reply) => { const status = error.name === "ZodError" ? 400 : error.message.includes("not found") ? 404 : error.statusCode ?? 500; if (status >= 500) app.log.error(error); void reply.code(status).send({ error: status >= 500 ? "InternalServerError" : error.name, message: status >= 500 ? "Internal server error" : error.message }); });
+  app.setErrorHandler((error: FastifyError, _request, reply) => { const status = error.name === "ZodError" ? 400 : error.message.includes("not found") ? 404 : error.statusCode ?? 500; if (status >= 500) app.log.error(error); if (error instanceof SchwabPortfolioError) { void reply.code(error.statusCode).send({ error: error.code, message: error.message }); return; } void reply.code(status).send({ error: status >= 500 ? "InternalServerError" : error.name, message: status >= 500 ? "Internal server error" : error.message }); });
   app.addHook("onClose", async () => prisma.$disconnect());
   return app;
 }

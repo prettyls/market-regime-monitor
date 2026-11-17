@@ -1,0 +1,10 @@
+{
+  "version": "paper-trend-v1",
+  "description": "Experimental long-only trend-following paper strategy; thresholds are research assumptions, not validated predictors.",
+  "entryRegimes": ["BREAKOUT_UP", "TREND_UP"],
+  "minimumScore": 50,
+  "minimumConfidence": 60,
+  "exitRegimes": ["BREAKOUT_DOWN", "TREND_DOWN"],
+  "otherRegimeAction": "NO_NEW_ALLOCATION",
+  "requireExitOnBearishSignal": true
+}

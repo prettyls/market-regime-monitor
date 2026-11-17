@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Push Schwab tokens from .env onto Cloud Run.
-# Sets SCHWAB_ACCESS_TOKEN, SCHWAB_REFRESH_TOKEN, and the client id/secret the
+# Sets SCHWAB_MARKET_ACCESS_TOKEN, SCHWAB_MARKET_REFRESH_TOKEN, and the client id/secret the
 # process requires before it will start with a refresh token. Updates the API
 # service and any collect, daily, backtest, and seed jobs that exist.
 # Does not rebuild the image. Cloud Build deploys with --update-env-vars and
@@ -96,36 +96,40 @@ env_update_arg() {
   printf '^%s^%s=%s' "$delim" "$key" "$value"
 }
 
-access_token=$(read_env SCHWAB_ACCESS_TOKEN "$ENV_FILE")
-refresh_token=$(read_env SCHWAB_REFRESH_TOKEN "$ENV_FILE")
-client_id=$(read_env_if_present SCHWAB_CLIENT_ID "$ENV_FILE")
-client_id_key="SCHWAB_CLIENT_ID"
-if [[ -z "$client_id" ]]; then
-  client_id=$(read_env_if_present CLIENT_ID "$ENV_FILE")
-  client_id_key="CLIENT_ID"
-fi
-client_secret=$(read_env_if_present SCHWAB_CLIENT_SECRET "$ENV_FILE")
-client_secret_key="SCHWAB_CLIENT_SECRET"
-if [[ -z "$client_secret" ]]; then
-  client_secret=$(read_env_if_present CLIENT_SECRET "$ENV_FILE")
-  client_secret_key="CLIENT_SECRET"
-fi
+# Select credentials explicitly; never fall back between connections.
+SCHWAB_CONNECTION=${SCHWAB_CONNECTION:-market}
+case "$SCHWAB_CONNECTION" in
+  market) credential_prefix=SCHWAB_MARKET ;;
+  trade) credential_prefix=SCHWAB_TRADE ;;
+  *) echo "SCHWAB_CONNECTION must be market or trade" >&2; exit 1 ;;
+esac
+access_token=$(read_env "${credential_prefix}_ACCESS_TOKEN" "$ENV_FILE")
+refresh_token=$(read_env "${credential_prefix}_REFRESH_TOKEN" "$ENV_FILE")
+client_id_key="${credential_prefix}_CLIENT_ID"
+client_secret_key="${credential_prefix}_CLIENT_SECRET"
+client_id=$(read_env "$client_id_key" "$ENV_FILE")
+client_secret=$(read_env "$client_secret_key" "$ENV_FILE")
 if [[ -z "$client_id" || -z "$client_secret" ]]; then
-  echo "SCHWAB_REFRESH_TOKEN requires CLIENT_ID and CLIENT_SECRET in ${ENV_FILE}. Cloud Run exits on startup without them." >&2
+  echo "SCHWAB_MARKET_REFRESH_TOKEN requires SCHWAB_MARKET_CLIENT_ID and SCHWAB_MARKET_CLIENT_SECRET in ${ENV_FILE}. Cloud Run exits on startup without them." >&2
   exit 1
 fi
 
 update_args=(
-  "$(env_update_arg SCHWAB_ACCESS_TOKEN "$access_token")"
-  "$(env_update_arg SCHWAB_REFRESH_TOKEN "$refresh_token")"
+  "$(env_update_arg "${credential_prefix}_ACCESS_TOKEN" "$access_token")"
+  "$(env_update_arg "${credential_prefix}_REFRESH_TOKEN" "$refresh_token")"
   "$(env_update_arg "$client_id_key" "$client_id")"
   "$(env_update_arg "$client_secret_key" "$client_secret")"
 )
 
-job_names=("${SERVICE_NAME}-collect" "${SERVICE_NAME}-daily" "${SERVICE_NAME}-backtest" "${SERVICE_NAME}-seed")
+job_names=()
+if [[ "$SCHWAB_CONNECTION" == "market" ]]; then
+  job_names=("${SERVICE_NAME}-collect" "${SERVICE_NAME}-daily" "${SERVICE_NAME}-backtest" "${SERVICE_NAME}-seed" "${SERVICE_NAME}-paper-execute" "${SERVICE_NAME}-paper-report")
+else
+  job_names=("${SERVICE_NAME}-refresh-trade-token")
+fi
 
 if [[ "$DRY_RUN" -eq 1 ]]; then
-  echo "Dry run. Would set SCHWAB_ACCESS_TOKEN (${#access_token} chars), SCHWAB_REFRESH_TOKEN (${#refresh_token} chars), ${client_id_key} (${#client_id} chars), and ${client_secret_key} (${#client_secret} chars) from ${ENV_FILE}."
+  echo "Dry run. Would set ${credential_prefix}_ACCESS_TOKEN (${#access_token} chars), ${credential_prefix}_REFRESH_TOKEN (${#refresh_token} chars), ${client_id_key} (${#client_id} chars), and ${client_secret_key} (${#client_secret} chars) from ${ENV_FILE}."
   echo "Project ${PROJECT_ID}, region ${REGION}."
   echo "  service ${SERVICE_NAME}"
   printf '  job %s (skipped if it does not exist)\n' "${job_names[@]}"
@@ -170,9 +174,9 @@ apply_tokens() {
   done
   local names
   names=$(env_names "$kind" "$name" || true)
-  if [[ "$names" == *"@SCHWAB_REFRESH_TOKEN"* ]]; then
-    echo "Removing invalid env var @SCHWAB_REFRESH_TOKEN from ${name}"
-    args+=(--remove-env-vars=@SCHWAB_REFRESH_TOKEN)
+  if [[ "$names" == *"@SCHWAB_MARKET_REFRESH_TOKEN"* ]]; then
+    echo "Removing invalid env var @SCHWAB_MARKET_REFRESH_TOKEN from ${name}"
+    args+=(--remove-env-vars=@SCHWAB_MARKET_REFRESH_TOKEN)
   fi
   echo "Updating Cloud Run ${kind} ${name}"
   gcloud "${args[@]}"
@@ -192,7 +196,7 @@ for job in "${job_names[@]}"; do
   fi
 done
 
-echo "Updated SCHWAB_ACCESS_TOKEN, SCHWAB_REFRESH_TOKEN, ${client_id_key}, and ${client_secret_key} on service ${SERVICE_NAME}."
+echo "Updated ${credential_prefix}_ACCESS_TOKEN, ${credential_prefix}_REFRESH_TOKEN, ${client_id_key}, and ${client_secret_key} on service ${SERVICE_NAME}."
 if [[ ${#updated_jobs[@]} -gt 0 ]]; then
   echo "Updated jobs: ${updated_jobs[*]}."
 fi

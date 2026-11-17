@@ -25,14 +25,14 @@ describe("trading boundary", () => {
     expect(policySchema.safeParse({ ...policy, maxDailyDollars: -1 }).success).toBe(false);
   });
   it("denies missing credentials and insufficient scopes before database access", async () => {
-    vi.stubEnv("AGENT_CREDENTIALS_JSON", JSON.stringify([{ id: "reader", token: "x".repeat(32), scopes: ["analysis:read"] }]));
+    vi.stubEnv("AGENT_CREDENTIALS_JSON", JSON.stringify([{ role: "admin", id: "reader", token: "x".repeat(32), scopes: ["analysis:read"] }]));
     const app = Fastify(); registerTradingRoutes(app, {} as PrismaClient);
     expect((await app.inject({ url: "/api/v1/agent/context" })).statusCode).toBe(401);
     expect((await app.inject({ method: "POST", url: "/api/v1/trade-proposals", headers: { authorization: `Bearer ${"x".repeat(32)}` }, payload: input })).statusCode).toBe(403);
     await app.close();
   });
   it("persists one snapshot and audit event, replays retries, rejects changed payloads", async () => {
-    vi.stubEnv("AGENT_CREDENTIALS_JSON", JSON.stringify([{ id: "agent", token: "x".repeat(32), scopes: ["trades:propose"] }]));
+    vi.stubEnv("AGENT_CREDENTIALS_JSON", JSON.stringify([{ role: "admin", id: "agent", token: "x".repeat(32), scopes: ["trades:propose"] }]));
     vi.stubEnv("TRADING_POLICY_JSON", JSON.stringify(policy));
     let saved: any;
     const tx = {
@@ -59,7 +59,7 @@ describe("trading boundary", () => {
     await app.close();
   });
   it.each(["EQUITY", "ETF", "INDEX", "RATE", "COMMODITY", "OTHER", null])("checks the target instrument type: %s", async kind => {
-    vi.stubEnv("AGENT_CREDENTIALS_JSON", JSON.stringify([{ id: "agent", token: "x".repeat(32), scopes: ["trades:propose"] }]));
+    vi.stubEnv("AGENT_CREDENTIALS_JSON", JSON.stringify([{ role: "admin", id: "agent", token: "x".repeat(32), scopes: ["trades:propose"] }]));
     vi.stubEnv("TRADING_POLICY_JSON", JSON.stringify(policy));
     const create = vi.fn(async ({ data }) => ({ id: "p1", ...data }));
     const tx = {
@@ -81,7 +81,7 @@ describe("trading boundary", () => {
     await app.close();
   });
   it("blocks proposals when the shared daily budget is exhausted", async () => {
-    vi.stubEnv("AGENT_CREDENTIALS_JSON", JSON.stringify([{ id: "agent", token: "x".repeat(32), scopes: ["trades:propose"] }]));
+    vi.stubEnv("AGENT_CREDENTIALS_JSON", JSON.stringify([{ role: "admin", id: "agent", token: "x".repeat(32), scopes: ["trades:propose"] }]));
     vi.stubEnv("TRADING_POLICY_JSON", JSON.stringify(policy));
     const { Prisma } = await import("@prisma/client");
     const create = vi.fn();

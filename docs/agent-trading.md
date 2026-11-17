@@ -13,7 +13,7 @@ implemented in this milestone.
    Replace the example token with the generated value. Restart the API.
 
 ```dotenv
-AGENT_CREDENTIALS_JSON='[{"id":"research-agent","token":"REPLACE_WITH_RANDOM_TOKEN_AT_LEAST_32_CHARACTERS","scopes":["analysis:read","portfolio:read","trades:propose"]}]'
+AGENT_CREDENTIALS_JSON='[{"id":"research-agent","role":"admin","token":"REPLACE_WITH_RANDOM_TOKEN_AT_LEAST_32_CHARACTERS","scopes":["analysis:read","portfolio:read","trades:propose"]}]'
 TRADING_POLICY_JSON='{"version":"paper-v1","enabled":true,"allowedSymbols":["SPY"],"maxOrderDollars":1000,"maxDailyDollars":5000,"maxAnalysisAgeHours":96}'
 ```
 
@@ -45,9 +45,8 @@ Context includes the newest 100 analysis records, instrument identifiers, policy
 and simulation mode. It can contain multiple dates for an instrument; choose the
 intended analysis ID. Portfolio accounts include positions and balances; orders
 cover the trailing seven days. Schwab requests have a 15-second timeout, return
-sanitized upstream errors, and use the current server access token. The existing
-market-data provider can refresh that token during its own requests; portfolio
-reads do not independently refresh it. Expired authorization requires renewal.
+sanitized upstream errors, and use only `SCHWAB_TRADE_ACCESS_TOKEN`. Market data uses its own `SCHWAB_MARKET_*` credentials; its refresh flow never
+updates trading credentials. With `SCHWAB_TRADE_TOKEN_STORE=database`, portfolio reads share persisted tokens with the scheduled refresh job and refresh near expiry. Otherwise they use the static trading access token. Expired refresh authorization requires OAuth renewal.
 
 Example proposal body:
 
@@ -99,6 +98,46 @@ Schwab positions are never modified. A SIMULATED result is not a broker fill.
 
 Before live execution, add centrally persisted and coordinated OAuth refresh,
 account entitlements, validated strategy mappings, fresh quotes, portfolio
-reservations, a paper portfolio ledger, human approval UI, immediate kill switch,
+reservations, human approval UI, immediate kill switch,
 durable execution queue, broker reconciliation and uncertain-submission handling.
-Add MCP as a wrapper over these same authenticated services when needed.
+The [MCP stdio adapter](mcp.md) wraps these same authenticated services.
+
+## Separate Schwab connections
+
+Each connection has its own `CLIENT_ID`, `CLIENT_SECRET`, `REDIRECT_URI`,
+`ACCESS_TOKEN`, and `REFRESH_TOKEN`, prefixed with `SCHWAB_MARKET_` or
+`SCHWAB_TRADE_`. The old unprefixed `CLIENT_ID`/`CLIENT_SECRET` and
+`SCHWAB_*` credential names are no longer read. Use credentials from the
+corresponding developer app for each connection.
+
+Generate and exchange tokens explicitly:
+
+```bash
+npm run schwab:oauth -- market url
+npm run schwab:oauth -- market 'FULL_MARKET_REDIRECT_URL'
+npm run schwab:oauth -- trade url
+npm run schwab:oauth -- trade 'FULL_TRADE_REDIRECT_URL'
+```
+
+The helper writes only the selected connection's tokens to `.env`. Market setup
+checks price history; trade setup checks account access without displaying
+account data. Restart the API after updating credentials. Updating local `.env`
+does not update a deployed API or an existing container's environment.
+
+For Cloud Run, the token update script defaults to market credentials; set
+`SCHWAB_CONNECTION=trade` to update the API service's trading credentials.
+Market updates also update collection jobs; trade updates do not.
+
+For generic MCP-compatible agents, see [MCP setup](mcp.md).
+
+Trading and agent endpoints require an explicitly configured `role: "admin"`
+in each authorized `AGENT_CREDENTIALS_JSON` entry, in addition to the required
+scope. Missing roles default to `user` and return 403. Anonymous/invalid tokens
+return 401. These bearer credentials delegate admin access only to their listed
+scopes; the browser's Basic admin login does not replace them. MCP uses the same
+server-side role checks. The stdio adapter exposes no listening network port.
+After updating roles, restart the API to apply configuration.
+
+A separate [scheduled paper portfolio](paper-trading.md) now maintains cash,
+positions, simulated fills and performance reports. Standalone proposals above
+remain independent of that ledger.

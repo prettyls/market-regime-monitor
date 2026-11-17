@@ -1,16 +1,7 @@
 #!/usr/bin/env tsx
 /**
- * One-off helper to run the Schwab OAuth authorization-code flow and store the
- * resulting access/refresh tokens in `.env`.
- *
- * Usage:
- *   tsx scripts/schwab-oauth.ts
- *     -> prints the authorization URL to open in a browser
- *
- *   tsx scripts/schwab-oauth.ts '<redirect-url-you-were-sent-to-after-approving>'
- *     -> exchanges the `code` (and `state`, for PKCE) in that URL for tokens,
- *        writes them to `.env`, and runs a live price-history request to
- *        confirm the Schwab API actually accepts the new token.
+ * Usage: npm run schwab:oauth -- <market|trade> <url|full-redirect-url>
+ * Writes only the selected connection's tokens and checks its API access.
  */
 import "dotenv/config";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -26,12 +17,20 @@ const readNonEmpty = (...values: Array<string | undefined>): string | undefined 
   return undefined;
 };
 
-const clientId = readNonEmpty(process.env.CLIENT_ID, process.env.SCHWAB_CLIENT_ID);
-const clientSecret = readNonEmpty(process.env.CLIENT_SECRET, process.env.SCHWAB_CLIENT_SECRET);
-const redirectUri = readNonEmpty(process.env.SCHWAB_REDIRECT_URI) ?? "http://localhost";
-
+const args = process.argv.slice(2);
+// pnpm can forward the npm-style separator to the script unchanged.
+if (args[0] === "--") args.shift();
+const connection = args[0];
+if (connection !== "market" && connection !== "trade") {
+  console.error("Usage: npm run schwab:oauth -- <market|trade> <url|full-redirect-url>");
+  process.exit(1);
+}
+const prefix = connection === "market" ? "SCHWAB_MARKET" : "SCHWAB_TRADE";
+const clientId = readNonEmpty(process.env[`${prefix}_CLIENT_ID`]);
+const clientSecret = readNonEmpty(process.env[`${prefix}_CLIENT_SECRET`]);
+const redirectUri = readNonEmpty(process.env[`${prefix}_REDIRECT_URI`]) ?? "http://localhost";
 if (!clientId || !clientSecret) {
-  console.error("CLIENT_ID and CLIENT_SECRET (or SCHWAB_CLIENT_ID/SCHWAB_CLIENT_SECRET) must be set in .env");
+  console.error(`${prefix}_CLIENT_ID and ${prefix}_CLIENT_SECRET must be set in .env`);
   process.exit(1);
 }
 
@@ -39,7 +38,7 @@ const manager = new EnhancedTokenManager({
   clientId,
   clientSecret,
   redirectUri,
-  debug: true,
+  debug: false,
   load: async () => null,
   save: async () => {},
 });
@@ -58,6 +57,9 @@ const updateEnvFile = (values: Record<string, string>): void => {
 };
 
 const parseCodeAndState = (input: string): { code: string; state?: string } => {
+  if (input.trim().startsWith("[")) {
+    throw new Error("Paste the plain redirect URL from the browser address bar, not a Markdown [label](URL) link. Keep it in single quotes without backslashes before &.");
+  }
   try {
     const url = new URL(input);
     const code = url.searchParams.get("code");
@@ -67,7 +69,7 @@ const parseCodeAndState = (input: string): { code: string; state?: string } => {
     if (error) {
       throw new Error(`Schwab returned an OAuth error: ${error}${errorDescription ? ` - ${errorDescription}` : ""}`);
     }
-    if (!code) throw new Error(`No "code" query parameter found in: ${input}`);
+    if (!code) throw new Error('No "code" query parameter found in the redirect URL');
     return { code, state };
   } catch (err) {
     if (err instanceof TypeError) {
@@ -94,7 +96,7 @@ async function testFetch(accessToken: string, refreshToken?: string): Promise<vo
 }
 
 async function main(): Promise<void> {
-  const arg = process.argv[2];
+  const arg = args[1];
 
   if (!arg || arg === "url") {
     const { authUrl } = await manager.getAuthorizationUrl();
@@ -105,7 +107,7 @@ async function main(): Promise<void> {
         ` (${redirectUri}); the page will likely fail to load (connection refused) - that's expected.`
     );
     console.log("3. Copy the FULL url from the address bar and re-run:\n");
-    console.log("   npm run schwab:oauth -- '<pasted-redirect-url>'\n");
+    console.log(`   npm run schwab:oauth -- ${connection} '<pasted-redirect-url>'\n`);
     return;
   }
 
@@ -118,23 +120,31 @@ async function main(): Promise<void> {
   } catch (err) {
     console.error("\nToken exchange failed. This usually means:");
     console.error("  - the authorization code already expired or was already used (codes are single-use, ~30s lifetime)");
-    console.error("  - the redirect URI used to request the code doesn't exactly match SCHWAB_REDIRECT_URI");
-    console.error("  - CLIENT_ID/CLIENT_SECRET don't match the app that generated the authorization URL");
+    console.error("  - the redirect URI used to request the code doesn't exactly match the selected connection redirect URI");
+    console.error("  - selected connection client credentials don't match the app that generated the authorization URL");
     console.error("\nUnderlying error:\n", err);
     process.exit(1);
   }
 
   console.log("Token exchange succeeded.");
   updateEnvFile({
-    SCHWAB_ACCESS_TOKEN: tokenData.accessToken,
-    ...(tokenData.refreshToken ? { SCHWAB_REFRESH_TOKEN: tokenData.refreshToken } : {}),
+    [`${prefix}_ACCESS_TOKEN`]: tokenData.accessToken,
+    ...(tokenData.refreshToken ? { [`${prefix}_REFRESH_TOKEN`]: tokenData.refreshToken } : {}),
   });
   console.log(
-    `Updated .env with new SCHWAB_ACCESS_TOKEN${tokenData.refreshToken ? " and SCHWAB_REFRESH_TOKEN" : " (no refresh token returned)"}.`
+    `Updated .env with ${prefix}_ACCESS_TOKEN${tokenData.refreshToken ? ` and ${prefix}_REFRESH_TOKEN` : " (no refresh token returned)"}.`
   );
 
   try {
-    await testFetch(tokenData.accessToken, tokenData.refreshToken);
+    if (connection === "market") await testFetch(tokenData.accessToken, tokenData.refreshToken);
+    else {
+      const response = await fetch("https://api.schwabapi.com/trader/v1/accounts?fields=positions", {
+        headers: { Authorization: `Bearer ${tokenData.accessToken}` }, signal: AbortSignal.timeout(15000),
+      });
+      await response.body?.cancel();
+      if (!response.ok) throw new Error(`Schwab trading authorization check failed (HTTP ${response.status})`);
+      console.log("Trading account authorization verified; no account data displayed.");
+    }
   } catch (err) {
     console.error("\nThe new token was issued but the live API call failed. Diagnostics:\n");
     console.error(err);

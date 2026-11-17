@@ -1,3 +1,5 @@
+import { paperConfig } from "../paper/config.js";
+import { tradingRules } from "../paper/rules.js";
 import { createHash, timingSafeEqual } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { Prisma, type PrismaClient } from "@prisma/client";
@@ -5,7 +7,8 @@ import { z } from "zod";
 import { notionalUnits, policySchema, proposalSchema, validatePolicy } from "./policy.js";
 import { readSchwab } from "./schwab.js";
 
-const agentSchema = z.array(z.object({
+export const agentSchema = z.array(z.object({
+  role: z.enum(["admin", "user"]).default("user"),
   id: z.string().min(1), token: z.string().min(32),
   scopes: z.array(z.enum(["analysis:read", "portfolio:read", "trades:propose"])),
 }).strict()).refine(agents => new Set(agents.map(a => a.id)).size === agents.length && new Set(agents.map(a => a.token)).size === agents.length, "Agent IDs and tokens must be unique");
@@ -25,6 +28,7 @@ export function registerTradingRoutes(app: FastifyInstance, db: PrismaClient) {
       const token = request.headers.authorization?.match(/^Bearer (.+)$/)?.[1] ?? "";
       const agent = agents.find(a => timingSafeEqual(digest(a.token), digest(token)));
       if (!agent) return reply.code(401).send({ error: "Agent authentication required" });
+      if (agent.role !== "admin") return reply.code(403).send({ error: "Administrator role required" });
       const scope = request.url.startsWith("/api/v1/agent/portfolio/") ? "portfolio:read"
         : request.url.startsWith("/api/v1/agent/context") ? "analysis:read" : "trades:propose";
       if (!agent.scopes.includes(scope)) return reply.code(403).send({ error: "Agent scope required", scope });
@@ -34,6 +38,12 @@ export function registerTradingRoutes(app: FastifyInstance, db: PrismaClient) {
       mode: "SIMULATION", policy,
       analyses: await db.analysis.findMany({ orderBy: { timestamp: "desc" }, take: 100,
         include: { instrument: { select: { symbol: true, kind: true } } } }),
+    }));
+    routes.get("/api/v1/agent/portfolio/paper", async () => ({
+      mode: "PAPER", policy: paperConfig(), rules: tradingRules, accounts: await db.paperAccount.findMany(),
+      runs: await db.paperRun.findMany({ orderBy: { createdAt: "desc" }, take: 20 }),
+      reports: await db.paperReport.findMany({ orderBy: { session: "desc" }, take: 20 }),
+      reviews: await db.paperRuleReview.findMany({ orderBy: { createdAt: "desc" }, take: 20 }),
     }));
     routes.get("/api/v1/agent/portfolio/accounts", async () => readSchwab("accounts"));
     routes.get("/api/v1/agent/portfolio/orders", async () => readSchwab("orders"));

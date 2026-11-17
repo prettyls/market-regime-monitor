@@ -7,6 +7,15 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model SchwabTradeToken {
+  id           String   @id
+  seedHash     String
+  accessToken  String
+  refreshToken String
+  expiresAt    DateTime
+  updatedAt    DateTime @updatedAt
+}
+
 model Instrument {
   id             String          @id @default(cuid())
   symbol         String          @unique
@@ -118,4 +127,68 @@ model TradingAuditEvent {
   createdAt  DateTime @default(now())
 
   @@index([proposalId, createdAt])
+}
+
+model PaperAccount {
+  id                  String   @id
+  initialCash         Decimal  @db.Decimal(18, 4)
+  cash                Decimal  @db.Decimal(18, 4)
+  positions           Json
+  benchmark           String
+  benchmarkStartPrice Decimal? @db.Decimal(18, 4)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+model PaperRun {
+  id        String   @id @default(cuid())
+  accountId String
+  session   String
+  strategy  String
+  status    String
+  inputs    Json
+  decision  Json
+  execution Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([accountId, session, strategy])
+  @@unique([accountId, session])
+}
+
+model PaperFill {
+  id        String   @id @default(cuid())
+  runId     String
+  symbol    String
+  side      String
+  quantity  Int
+  price     Decimal  @db.Decimal(18, 4)
+  fee       Decimal  @db.Decimal(18, 4)
+  createdAt DateTime @default(now())
+
+  @@unique([runId, symbol])
+}
+
+model PaperReport {
+  id        String   @id @default(cuid())
+  accountId String
+  session   String
+  metrics   Json
+  createdAt DateTime @default(now())
+
+  @@unique([accountId, session])
+}
+
+model PaperRuleReview {
+  id          String   @id @default(cuid())
+  accountId   String
+  session     String
+  ruleVersion String
+  status      String
+  evidence    Json
+  proposal    Json
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([accountId, session, ruleVersion])
 }

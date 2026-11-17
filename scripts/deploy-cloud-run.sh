@@ -22,6 +22,9 @@ VPC_NETWORK=${VPC_NETWORK:-default}
 VPC_SUBNET=${VPC_SUBNET:-default}
 VPC_CONNECTOR=${VPC_CONNECTOR:-none}
 IMAGE_TAG=${IMAGE_TAG:-$(date -u +%Y%m%d-%H%M%S)}
+CREDENTIAL_SECRET_PREFIX=${CREDENTIAL_SECRET_PREFIX:-none}
+TRADE_REFRESH_ENABLED=${TRADE_REFRESH_ENABLED:-false}
+BUILD_SERVICE_ACCOUNT=${BUILD_SERVICE_ACCOUNT:-projects/${PROJECT_ID}/serviceAccounts/market-regime-deployer@${PROJECT_ID}.iam.gserviceaccount.com}
 
 if [[ "$VPC_CONNECTOR" == *'~'* || "$IMAGE_TAG" == *'~'* || "$REGION" == *'~'* || "$VPC_NETWORK" == *'~'* || "$VPC_SUBNET" == *'~'* ]]; then
   echo "VPC_CONNECTOR, VPC_NETWORK, VPC_SUBNET, IMAGE_TAG, and REGION cannot contain '~'." >&2
@@ -32,5 +35,5 @@ command -v gcloud >/dev/null || { echo "Install the Google Cloud CLI first." >&2
 cd "$(dirname "$0")/.."
 
 # SHORT_SHA is the image tag. A main-branch trigger sets it from the commit.
-gcloud builds submit . --project="$PROJECT_ID" --config=cloudbuild.yaml \
-  --substitutions="^~^SHORT_SHA=${IMAGE_TAG}~_REGION=${REGION}~_REPOSITORY=${REPOSITORY}~_SERVICE_NAME=${SERVICE_NAME}~_SERVICE_ACCOUNT_ID=${SERVICE_ACCOUNT_ID}~_DATABASE_SECRET=${DATABASE_SECRET}~_SECRET_VERSION=${SECRET_VERSION}~_VPC_CONNECTOR=${VPC_CONNECTOR}~_VPC_EGRESS=${VPC_EGRESS}~_VPC_NETWORK=${VPC_NETWORK}~_VPC_SUBNET=${VPC_SUBNET}"
+gcloud builds submit . --project="$PROJECT_ID" --config=cloudbuild.yaml --service-account="$BUILD_SERVICE_ACCOUNT" \
+  --substitutions="^~^SHORT_SHA=${IMAGE_TAG}~_REGION=${REGION}~_REPOSITORY=${REPOSITORY}~_SERVICE_NAME=${SERVICE_NAME}~_SERVICE_ACCOUNT_ID=${SERVICE_ACCOUNT_ID}~_DATABASE_SECRET=${DATABASE_SECRET}~_SECRET_VERSION=${SECRET_VERSION}~_VPC_CONNECTOR=${VPC_CONNECTOR}~_VPC_EGRESS=${VPC_EGRESS}~_VPC_NETWORK=${VPC_NETWORK}~_VPC_SUBNET=${VPC_SUBNET}~_CREDENTIAL_SECRET_PREFIX=${CREDENTIAL_SECRET_PREFIX}~_TRADE_REFRESH_ENABLED=${TRADE_REFRESH_ENABLED}"
