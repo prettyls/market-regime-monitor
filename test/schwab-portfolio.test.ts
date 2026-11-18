@@ -11,6 +11,7 @@ it.each([
   vi.stubGlobal("fetch", fetch);
   await expect(readSchwab("accounts")).rejects.toMatchObject({ code, statusCode: 502 });
   await expect(readSchwab("accounts")).rejects.not.toThrow("private");
+  if (status === 500) await expect(readSchwab("accounts")).rejects.toMatchObject({ upstreamStatus: 500 });
 });
 it("rejects missing credentials without a network call", async () => {
   vi.stubEnv("SCHWAB_TRADE_ACCESS_TOKEN", "");

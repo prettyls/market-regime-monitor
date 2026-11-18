@@ -1,7 +1,7 @@
 import { tradeAccessToken } from "./token.js";
 /** Only fixed, application-owned messages may be exposed to API callers. */
 export class SchwabPortfolioError extends Error {
-  constructor(readonly code: string, message: string, readonly statusCode = 502) {
+  constructor(readonly code: string, message: string, readonly statusCode = 502, readonly upstreamStatus?: number) {
     super(message);
     this.name = "SchwabPortfolioError";
   }
@@ -35,7 +35,7 @@ export async function readSchwabResource(resource: string): Promise<unknown> {
     if (response.status === 401) throw new SchwabPortfolioError("SCHWAB_AUTH_REJECTED", "Schwab rejected portfolio authorization; check Accounts and Trading Production access and linked-account consent. If credentials changed, restart the server");
     if (response.status === 403) throw new SchwabPortfolioError("SCHWAB_ACCESS_DENIED", "Schwab denied portfolio access; check app trading API access and account authorization");
     if (response.status === 429) throw new SchwabPortfolioError("SCHWAB_RATE_LIMITED", "Schwab rate limit reached; retry later");
-    throw new SchwabPortfolioError("SCHWAB_UPSTREAM_ERROR", "Schwab portfolio request failed; retry later");
+    throw new SchwabPortfolioError("SCHWAB_UPSTREAM_ERROR", "Schwab upstream request failed", 502, response.status);
   }
   try { return await response.json(); }
   catch { throw new SchwabPortfolioError("SCHWAB_INVALID_RESPONSE", "Schwab returned an invalid portfolio response"); }
