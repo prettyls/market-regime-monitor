@@ -29,7 +29,14 @@ export async function syncCalendar(db: PrismaClient, configured?: string, now = 
   const start = backfill ? earliest : new Date(Math.max(earliest.getTime(), snapshot.syncedAt.getTime() - 7 * dayMs));
   const results = await Promise.all(["TRADE", "RECEIVE_AND_DELIVER"].map(async type => {
     const params = new URLSearchParams({ startDate: start.toISOString(), endDate: now.toISOString(), types: type });
-    const result = transactionSchema.safeParse(await readSchwabResource(`accounts/${encodeURIComponent(accountHash)}/transactions?${params}`));
+    let response: unknown;
+    try {
+      response = await readSchwabResource(`accounts/${encodeURIComponent(accountHash)}/transactions?${params}`);
+    } catch (error) {
+      if (!(error instanceof SchwabPortfolioError)) throw error;
+      throw new SchwabPortfolioError(error.code, `${type} transactions: ${error.message}`, error.statusCode, error.upstreamStatus);
+    }
+    const result = transactionSchema.safeParse(response);
     if (!result.success) throw new SchwabPortfolioError("SCHWAB_INVALID_RESPONSE", "Schwab returned unsupported transaction data");
     return result.data;
   }));

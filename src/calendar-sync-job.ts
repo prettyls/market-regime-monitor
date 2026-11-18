@@ -7,7 +7,11 @@ import { SchwabPortfolioError } from "./trading/schwab.js";
 try {
   console.log(await syncCalendar(prisma, configuredSchwabAccountHash()));
 } catch (error) {
-  console.error(error instanceof SchwabPortfolioError ? error.message : "Schwab calendar sync failed");
+  if (error instanceof SchwabPortfolioError) {
+    console.error({ code: error.code, message: error.message, upstreamStatus: error.upstreamStatus });
+  } else {
+    console.error("Schwab calendar sync failed");
+  }
   process.exitCode = 1;
 } finally {
   await prisma.$disconnect();
