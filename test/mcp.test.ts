@@ -16,7 +16,7 @@ describe("MCP agent adapter", () => {
     const { client, close } = await setup(vi.fn());
     try {
       const result = await client.listTools();
-      expect(result.tools.map(t => t.name)).toEqual(["get_trading_context", "get_schwab_bars", "get_portfolio", "get_paper_portfolio", "get_recent_orders", "propose_trade", "get_trade_proposal", "get_live_trading_permission", "place_live_order"]);
+      expect(result.tools.map(t => t.name)).toEqual(["get_trading_skill", "get_trading_context", "get_schwab_bars", "get_portfolio", "get_paper_portfolio", "get_recent_orders", "propose_trade", "get_trade_proposal", "get_live_trading_permission", "place_live_order"]);
       expect(result.tools.find(t => t.name === "propose_trade")?.annotations?.readOnlyHint).toBe(false);
     } finally { await close(); }
   });
@@ -31,6 +31,7 @@ describe("MCP agent adapter", () => {
         ["get_recent_orders", {}, "/api/v1/agent/portfolio/orders"],
         ["propose_trade", proposal, "/api/v1/trade-proposals"],
         ["get_trade_proposal", { id: "proposal-1" }, "/api/v1/trade-proposals/proposal-1"],
+        ["get_trading_skill", { workflow: "live" }, "/api/v1/agent/skills/live"],
         ["get_schwab_bars", { symbol: "spy", interval: "5m" }, "/api/v1/agent/bars/SPY?interval=5m"],
       ] as const) {
         const result = await client.callTool({ name, arguments: args });
