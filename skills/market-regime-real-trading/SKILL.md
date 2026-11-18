@@ -9,6 +9,15 @@ and balances with `get_portfolio({})` and actual broker order records with
 days. For market-regime evidence, use `get_trading_context({})` when available
 and identify the analysis symbol and session date.
 
+Use `get_schwab_bars` for market candles at the requested interval. For
+five-minute candles, pass `interval: "5m"`. If Schwab is unavailable or returns
+no candles for the requested window, report the data gap and use Schwab as the
+sole source for the request. When analyzing bars, report volume change alongside
+price action for each requested interval. Compare completed bars of the same
+interval and duration, and flag missing volume or partial bars separately.
+For intraday participation across sessions, compare the same time of day
+when those bars are available.
+
 Use the account the user names. If several accounts match or the intended
 account is unclear, ask which account to review before presenting
 account-specific conclusions. Keep account details private and use masked

@@ -7,6 +7,8 @@ import { z } from "zod";
 import { eligibleTradingInstrument, listEligibleTradingSymbols } from "./instruments.js";
 import { liveOrderConfig, notionalUnits, proposalSchema, simulationPolicyConfigSchema, validatePolicy } from "./policy.js";
 import { registerLiveOrderRoutes } from "./live.js";
+import { priceHistoryQuerySchema } from "../schemas.js";
+import type { MarketService } from "../services.js";
 import { readSchwab } from "./schwab.js";
 
 export const agentSchema = z.array(z.object({
@@ -26,7 +28,7 @@ const digest = (s: string) => createHash("sha256").update(s).digest();
 const json = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 const error = (message: string, statusCode: number) => Object.assign(new Error(message), { statusCode });
 
-export function registerTradingRoutes(app: FastifyInstance, db: PrismaClient, liveConfig = liveOrderConfig()) {
+export function registerTradingRoutes(app: FastifyInstance, db: PrismaClient, liveConfig = liveOrderConfig(), market?: Pick<MarketService, "downloadHistory">) {
   // Configuration is optional; missing configuration denies all agent access.
   const agents = readAgentCredentials();
   const policy = simulationPolicyConfigSchema.parse(JSON.parse(process.env.TRADING_POLICY_JSON ?? JSON.stringify({
@@ -40,12 +42,25 @@ export function registerTradingRoutes(app: FastifyInstance, db: PrismaClient, li
       if (!agent) return reply.code(401).send({ error: "Agent authentication required" });
       if (agent.role !== "admin") return reply.code(403).send({ error: "Administrator role required" });
       const scope = request.url.startsWith("/api/v1/agent/portfolio/") ? "portfolio:read"
-        : request.url.startsWith("/api/v1/agent/context") ? "analysis:read"
+        : ["/api/v1/agent/context", "/api/v1/agent/bars/:symbol"].includes(request.routeOptions.url ?? "") ? "analysis:read"
         : request.routeOptions.url?.startsWith("/api/v1/agent/live-orders") ? "trades:execute" : "trades:propose";
       if (!agent.scopes.includes(scope)) return reply.code(403).send({ error: "Agent scope required", scope });
       request.agentId = agent.id;
     });
     registerLiveOrderRoutes(routes, db, liveConfig);
+    routes.get("/api/v1/agent/bars/:symbol", async request => {
+      if (!market) throw error("Schwab market data is unavailable", 503);
+      const { symbol } = request.params as { symbol: string };
+      const { from, to, interval } = priceHistoryQuerySchema.parse(request.query);
+      const history = await market.downloadHistory(symbol, from, to, interval, true);
+      const bars = history.map((bar, index) => {
+        const previous = history[index - 1]?.volume;
+        const volumeChange = bar.volume === undefined || previous === undefined ? null : bar.volume - previous;
+        const volumeChangePct = volumeChange === null || !previous ? null : (volumeChange / previous) * 100;
+        return { ...bar, volumeChange, volumeChangePct };
+      });
+      return { provider: "charles_schwab", symbol: symbol.toUpperCase(), interval, bars };
+    });
     routes.get("/api/v1/agent/context", async () => ({
       mode: "SIMULATION", policy: { ...policy, allowedSymbols: await listEligibleTradingSymbols(db) },
       analyses: await db.analysis.findMany({ orderBy: { timestamp: "desc" }, take: 100,

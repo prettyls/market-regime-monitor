@@ -34,6 +34,49 @@ describe("CharlesSchwabProvider", () => {
     expect(result[0]?.close).toBe(13);
   });
 
+  it("requests five-minute candles with exact timestamp bounds", async () => {
+    const from = new Date("2026-11-06T14:30:00Z");
+    const to = new Date("2026-11-06T14:40:00Z");
+    const candle = { datetime: from.getTime(), open: 13, high: 15, low: 12, close: 14 };
+    const getPriceHistory = vi.fn().mockResolvedValue({
+      candles: [candle, { ...candle, datetime: from.getTime() - 300_000 }],
+    });
+    const provider = new CharlesSchwabProvider({ accessToken: "test-token" }, () => ({
+      marketData: { priceHistory: { getPriceHistory } },
+    }));
+
+    const bars = await provider.fetchHistory({ symbol: "SPY", interval: "5m", from, to });
+
+    expect(getPriceHistory).toHaveBeenCalledWith({ queryParams: {
+      symbol: "SPY", periodType: "day", frequencyType: "minute", frequency: 5,
+      needExtendedHoursData: false, startDate: from.getTime(), endDate: to.getTime(),
+    } });
+    expect(bars.map(bar => bar.timestamp)).toEqual([from]);
+  });
+
+  it("builds session-aligned hourly candles from Schwab 30-minute candles", async () => {
+    const start = Date.parse("2026-11-06T14:30:00Z");
+    const next = start + 30 * 60 * 1000;
+    const getPriceHistory = vi.fn().mockResolvedValue({ candles: [
+      { datetime: next, open: 13, high: 17, low: 12, close: 16, volume: 20 },
+      { datetime: start, open: 10, high: 14, low: 9, close: 13, volume: 10 },
+      { datetime: start + 60 * 60 * 1000, open: 16, high: 18, low: 15, close: 17, volume: 5 },
+    ] });
+    const provider = new CharlesSchwabProvider({ accessToken: "test-token" }, () => ({
+      marketData: { priceHistory: { getPriceHistory } },
+    }));
+
+    const bars = await provider.fetchHistory({ symbol: "SPY", interval: "1h" });
+
+    expect(getPriceHistory).toHaveBeenCalledWith({ queryParams: expect.objectContaining({
+      frequencyType: "minute", frequency: 30, needExtendedHoursData: false,
+    }) });
+    expect(bars).toEqual([
+      { timestamp: new Date(start), open: 10, high: 17, low: 9, close: 16, volume: 30 },
+      { timestamp: new Date(start + 60 * 60 * 1000), open: 16, high: 18, low: 15, close: 17, volume: 5 },
+    ]);
+  });
+
   it("requests the day after an inclusive end date so a one-day window is not empty", async () => {
     const getPriceHistory = vi.fn().mockResolvedValue({
       candles: [

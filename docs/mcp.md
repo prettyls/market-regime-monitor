@@ -57,6 +57,7 @@ proxy documented in the README; it does not mint Google identity tokens.
 | Tool | Purpose | Required API scope |
 | --- | --- | --- |
 | `get_trading_context` | Saved analyses, simulation policy and eligible symbols | `analysis:read` |
+| `get_schwab_bars` | Schwab OHLCV candles for registered Schwab instruments | `analysis:read` |
 | `get_portfolio` | Actual Schwab accounts, positions and balances | `portfolio:read` |
 | `get_paper_portfolio` | Paper ledger, saved decisions and reports | `portfolio:read` |
 | `get_recent_orders` | Actual broker orders, trailing seven days | `portfolio:read` |
@@ -64,6 +65,19 @@ proxy documented in the README; it does not mint Google identity tokens.
 | `place_live_order` | Submit a live Schwab BUY or SELL LIMIT DAY order | `trades:execute` |
 | `propose_trade` | Save a simulated BUY LIMIT DAY proposal | `trades:propose` |
 | `get_trade_proposal` | Read this agent's saved proposal by ID | `trades:propose` |
+
+Scheduled regime analysis uses daily candles. For an on-demand Schwab lookup,
+call `get_schwab_bars` with inputs such as `{"symbol":"SPY","interval":"5m"}`.
+Supported intervals are `1d`, `1m`, `5m`, `10m`, `15m`, `30m`, and `1h`. Intraday
+candles cover regular trading hours. Hourly candles combine Schwab 30-minute
+candles in windows aligned to 9:30 a.m. Eastern. The final window can be
+shorter at the session close or at the end of the requested range. Optional
+`from` and `to` values take ISO 8601 timestamps with offsets. With no bounds,
+intraday requests use Schwab's
+one-day period. Each bar includes `volumeChange` and `volumeChangePct` versus
+the previous returned bar at the same interval. A missing comparison returns
+`null`. A zero prior volume also yields a `null` percentage. Compare completed
+bars of equal duration when interpreting changes in participation.
 
 All tools are discoverable. The API rejects tools requiring scopes that
 the configured credential lacks. Portfolio outputs contain private account data;

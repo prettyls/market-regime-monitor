@@ -21,11 +21,11 @@ export function buildApp() {
   void app.register(sensible);
   registerAccess(app);
   const liveConfig = liveOrderConfig();
-  registerTradingRoutes(app, prisma, liveConfig);
   const calendarAccount = configuredSchwabAccountHash();
   registerMcpHttp(app);
   const providers = new ProviderRegistry();
   const service = new MarketService(prisma, providers, app.log);
+  registerTradingRoutes(app, prisma, liveConfig, service);
   const newInstrumentPage = newInstrumentHtml(providers.names());
   app.get("/", async (_request, reply) => reply.type("text/html; charset=utf-8").send(uiHtml));
   app.get("/calendar", async (_request, reply) => reply.type("text/html; charset=utf-8").send(calendarHtml));
@@ -46,7 +46,7 @@ export function buildApp() {
   app.get("/api/v1/instruments", async () => prisma.instrument.findMany({ orderBy: { symbol: "asc" }, select: { symbol: true, name: true, kind: true } }));
   app.post("/api/v1/instruments", async (request, reply) => reply.code(201).send(await service.addInstrument(instrumentInputSchema.parse(request.body))));
   app.post("/api/v1/instruments/:symbol/import", async (request) => { const { symbol } = request.params as { symbol: string }; const query = historyQuerySchema.parse(request.query); return { imported: await service.importHistory(symbol, query.from, query.to) }; });
-  app.get("/api/v1/instruments/:symbol/pricehistory", async (request) => { const { symbol } = request.params as { symbol: string }; const query = priceHistoryQuerySchema.parse(request.query); return service.downloadHistory(symbol, query.from, query.to); });
+  app.get("/api/v1/instruments/:symbol/pricehistory", async (request) => { const { symbol } = request.params as { symbol: string }; const query = priceHistoryQuerySchema.parse(request.query); return service.downloadHistory(symbol, query.from, query.to, query.interval); });
   app.get("/api/v1/instruments/:symbol/data", async (request) => { const { symbol } = request.params as { symbol: string }; return prisma.marketBar.findMany({ where: { instrument: { symbol: symbol.toUpperCase() } }, orderBy: { timestamp: "desc" }, take: 500 }); });
   app.post("/api/v1/instruments/:symbol/analyze", async (request) => withStatus(await service.analyze((request.params as { symbol: string }).symbol)));
   app.get("/api/v1/instruments/:symbol/analysis", async (request) => { const analysis = await prisma.analysis.findFirst({ where: { instrument: { symbol: (request.params as { symbol: string }).symbol.toUpperCase() } }, orderBy: { timestamp: "desc" } }); return analysis ? withStatus(analysis) : null; });

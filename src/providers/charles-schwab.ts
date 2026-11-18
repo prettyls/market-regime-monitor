@@ -21,6 +21,8 @@ export type SchwabProviderAuth = Readonly<{
 
 type SchwabClientFactory = (authConfig: SchwabProviderAuth) => SchwabPriceHistoryApi;
 
+const halfHourMs = 30 * 60 * 1000;
+const hourMs = 2 * halfHourMs;
 const dayMs = 24 * 60 * 60 * 1000;
 const dayStartUtc = (date: Date): number => Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
 
@@ -81,18 +83,22 @@ export class CharlesSchwabProvider implements MarketDataProvider {
   }
 
   async fetchHistory(request: HistoryRequest): Promise<readonly Bar[]> {
-    const start = request.from ? dayStartUtc(request.from) : undefined;
+    const daily = request.interval === "1d";
+    const hourly = request.interval === "1h";
+    const boundary = daily ? dayStartUtc : (date: Date) => date.getTime();
+    const start = request.from ? boundary(request.from) : undefined;
     // Schwab rejects a zero-length window, and daily candles are stamped during the session, so the end is the next UTC midnight.
-    const inclusiveEnd = request.to ? dayStartUtc(request.to) : undefined;
+    const inclusiveEnd = request.to ? boundary(request.to) : undefined;
     const payload = await this.client.marketData.priceHistory.getPriceHistory({
       queryParams: {
         symbol: request.symbol,
         // Schwab defaults periodType to "day", which rejects daily frequency. "year" allows daily bars.
-        periodType: "year",
-        frequencyType: "daily",
-        frequency: 1,
+        ...(daily
+          ? { periodType: "year", frequencyType: "daily", frequency: 1 } as const
+          : { periodType: "day", frequencyType: "minute", frequency: hourly ? 30 : Number.parseInt(request.interval, 10),
+              needExtendedHoursData: false, ...(start === undefined && inclusiveEnd === undefined ? { period: 1 } : {}) } as const),
         ...(start !== undefined ? { startDate: start } : {}),
-        ...(inclusiveEnd !== undefined ? { endDate: inclusiveEnd + dayMs } : {}),
+        ...(inclusiveEnd !== undefined ? { endDate: inclusiveEnd + (daily ? dayMs : 0) } : {}),
       },
     });
     const bars = (payload.candles ?? [])
@@ -114,11 +120,36 @@ export class CharlesSchwabProvider implements MarketDataProvider {
         return values.every((value) => Number.isFinite(value));
       });
 
-    return bars
-      .filter((bar) => {
-        const day = dayStartUtc(bar.timestamp);
-        return (start === undefined || day >= start) && (inclusiveEnd === undefined || day <= inclusiveEnd);
-      })
-      .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+    const candles = bars.filter((bar) => {
+      const time = boundary(bar.timestamp);
+      return (start === undefined || time >= start) && (inclusiveEnd === undefined || time <= inclusiveEnd);
+    }).sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+    return hourly ? aggregateHourly(candles) : candles;
   }
+}
+
+// Regular US equity sessions begin at 09:30 Eastern. The UTC offset changes
+// with daylight saving time, but the half-hour alignment stays the same.
+function aggregateHourly(bars: readonly Bar[]): Bar[] {
+  const candles = new Map<number, Bar>();
+  for (const bar of bars) {
+    const time = bar.timestamp.getTime();
+    const start = Math.floor((time - halfHourMs) / hourMs) * hourMs + halfHourMs;
+    const current = candles.get(start);
+    if (!current) {
+      if (time === start) candles.set(start, bar);
+      continue;
+    }
+    const volume = current.volume === undefined || bar.volume === undefined
+      ? undefined : current.volume + bar.volume;
+    candles.set(start, {
+      timestamp: current.timestamp,
+      open: current.open,
+      high: Math.max(current.high, bar.high),
+      low: Math.min(current.low, bar.low),
+      close: bar.close,
+      ...(volume === undefined ? {} : { volume }),
+    });
+  }
+  return [...candles.values()];
 }

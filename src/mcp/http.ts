@@ -18,7 +18,7 @@ export function registerMcpHttp(app: FastifyInstance) {
     // Use internal injection: no external base URL or Host header can redirect credentials.
     const apiFetch: typeof fetch = async (input, init) => {
       const url = new URL(String(input));
-      const result = await app.inject({ method: init?.method === "POST" ? "POST" : "GET", url: url.pathname, headers: { authorization: `Bearer ${token}`, ...(init?.body ? { "content-type": "application/json" } : {}) }, ...(init?.body ? { payload: String(init.body) } : {}) });
+      const result = await app.inject({ method: init?.method === "POST" ? "POST" : "GET", url: url.pathname + url.search, headers: { authorization: `Bearer ${token}`, ...(init?.body ? { "content-type": "application/json" } : {}) }, ...(init?.body ? { payload: String(init.body) } : {}) });
       return new Response(result.body, { status: result.statusCode, headers: { "content-type": "application/json" } });
     };
     const server = createTradingMcpServer({ apiUrl: "http://localhost", agentToken: token }, apiFetch);
