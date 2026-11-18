@@ -24,3 +24,5 @@ export const schwabBarsInputSchema = z.object({
   to: z.iso.datetime({ offset: true }).optional(),
 }).strict();
 export const alertQuerySchema = z.object({ symbol: z.string().optional(), severity: z.enum(["INFO", "WATCH", "WARNING", "CRITICAL"]).optional(), limit: z.coerce.number().int().min(1).max(500).default(100) });
+
+export const tradingSkillInputSchema = z.object({ workflow: z.enum(["paper", "live"]) }).strict();

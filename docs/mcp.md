@@ -56,6 +56,7 @@ proxy documented in the README; it does not mint Google identity tokens.
 
 | Tool | Purpose | Required API scope |
 | --- | --- | --- |
+| `get_trading_skill` | Deployed skill Markdown, references, and content version for `paper` or `live` | `analysis:read` |
 | `get_trading_context` | Saved analyses, simulation policy and eligible symbols | `analysis:read` |
 | `get_schwab_bars` | Schwab OHLCV candles for registered Schwab instruments | `analysis:read` |
 | `get_portfolio` | Actual Schwab accounts, positions and balances | `portfolio:read` |
@@ -65,6 +66,13 @@ proxy documented in the README; it does not mint Google identity tokens.
 | `place_live_order` | Submit a live Schwab BUY or SELL LIMIT DAY order | `trades:execute` |
 | `propose_trade` | Save a simulated BUY LIMIT DAY proposal | `trades:propose` |
 | `get_trade_proposal` | Read this agent's saved proposal by ID | `trades:propose` |
+
+Agents can call `get_trading_skill` with `{"workflow":"paper"}` or
+`{"workflow":"live"}` over either MCP transport. The API serves the repository
+skill and its bundled references in one response. The version is a SHA-256
+fingerprint of the returned files and changes when their contents change.
+The agent host needs to discover and call the tool. Trading permissions are
+checked separately by the order endpoints.
 
 Scheduled regime analysis uses daily candles. For an on-demand Schwab lookup,
 call `get_schwab_bars` with inputs such as `{"symbol":"SPY","interval":"5m"}`.

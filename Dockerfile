@@ -12,6 +12,7 @@ RUN pnpm db:generate
 COPY tsconfig.json ./
 COPY src ./src
 COPY test ./test
+COPY skills ./skills
 RUN pnpm test && pnpm build
 
 # Separate image for schema migrations; never migrate during API startup.
@@ -28,6 +29,7 @@ ENV NODE_ENV=production HOST=0.0.0.0 PORT=8080 LOG_LEVEL=info
 COPY --from=production-dependencies --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/dist/src ./dist/src
 COPY --from=build --chown=node:node /app/package.json ./package.json
+COPY --from=build --chown=node:node /app/skills ./skills
 COPY --chown=node:node examples ./examples
 USER node
 EXPOSE 8080
