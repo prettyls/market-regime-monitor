@@ -77,3 +77,10 @@ describe("landing page flow", () => {
    expect(publicHtml).not.toContain('id="analyze"');
    expect(publicHtml).toContain('href="/admin"');
  });
+
+it("offers CSV import with a required configured provider and valid form script", () => {
+  const html = newInstrumentHtml(["stooq", "charles_schwab"]);
+  expect(html).toContain('<select id="csv-provider" required><option value="">Select a provider</option><option value="charles_schwab">Charles Schwab</option>');
+  expect(html).toContain('id="csv-file" type="file"');
+  expect(() => new Script(html.match(/<script>([\s\S]*?)<\/script>/)![1]!)).not.toThrow();
+});

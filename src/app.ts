@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { readCalendar } from "./trading/calendar.js";
 import { calendarHtml } from "./web/calendar.js";
 import { registerMcpHttp } from "./mcp/http.js";
@@ -45,6 +46,10 @@ export function buildApp() {
   app.get("/api/v1/auth/token-status", async () => providers.tokenStatus());
   app.get("/api/v1/instruments", async () => prisma.instrument.findMany({ orderBy: { symbol: "asc" }, select: { symbol: true, name: true, kind: true } }));
   app.post("/api/v1/instruments", async (request, reply) => reply.code(201).send(await service.addInstrument(instrumentInputSchema.parse(request.body))));
+  app.post("/api/v1/instruments/import-csv", async (request) => {
+    const { provider, csv } = z.object({ provider: z.string().min(1), csv: z.string().min(1) }).parse(request.body);
+    return service.importInstrumentCsv(provider, csv);
+  });
   app.post("/api/v1/instruments/:symbol/import", async (request) => { const { symbol } = request.params as { symbol: string }; const query = historyQuerySchema.parse(request.query); return { imported: await service.importHistory(symbol, query.from, query.to) }; });
   app.get("/api/v1/instruments/:symbol/pricehistory", async (request) => { const { symbol } = request.params as { symbol: string }; const query = priceHistoryQuerySchema.parse(request.query); return service.downloadHistory(symbol, query.from, query.to, query.interval); });
   app.get("/api/v1/instruments/:symbol/data", async (request) => { const { symbol } = request.params as { symbol: string }; return prisma.marketBar.findMany({ where: { instrument: { symbol: symbol.toUpperCase() } }, orderBy: { timestamp: "desc" }, take: 500 }); });

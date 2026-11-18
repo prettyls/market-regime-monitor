@@ -1,3 +1,5 @@
+import { defaultPatternConfig } from "./config.js";
+import { instrumentCsvFormats, lookupWatchlistKinds } from "./instrument-csv.js";
 import type { Prisma, PrismaClient } from "@prisma/client";
 import type { AnalysisResult, Bar, InstrumentDefinition, PatternConfig } from "./domain/types.js";
 import { CompositeRegimeStrategy } from "./domain/strategy.js";
@@ -11,6 +13,43 @@ export class MarketService {
   async addInstrument(definition: InstrumentDefinition) {
     const providerSymbol = resolveProviderSymbol(definition);
     return this.db.instrument.upsert({ where: { symbol: definition.symbol }, create: { ...definition, providerSymbol, config: definition.config as unknown as Prisma.InputJsonValue }, update: { name: definition.name, kind: definition.kind, provider: definition.provider, providerSymbol, config: definition.config as unknown as Prisma.InputJsonValue } });
+  }
+
+  async importInstrumentCsv(provider: string, csv: string) {
+    const format = instrumentCsvFormats.get(provider);
+    if (!format || !this.providers.names().includes(provider)) {
+      throw Object.assign(new Error("Select a configured provider with a supported CSV format"), { statusCode: 400 });
+    }
+    const entries = new Map<string, { symbol: string; name: string }>();
+    for (const entry of format.parse(csv)) {
+      if (!entries.has(entry.symbol)) entries.set(entry.symbol, entry);
+    }
+    const existing = await this.db.instrument.findMany({
+      where: { symbol: { in: [...entries.keys()] } }, select: { symbol: true },
+    });
+    const existingSymbols = new Set(existing.map(({ symbol }) => symbol));
+    const candidates = [...entries.values()].filter(({ symbol }) => !existingSymbols.has(symbol));
+    const { kinds, incomplete } = candidates.length
+      ? await lookupWatchlistKinds(candidates)
+      : { kinds: new Map<string, never>(), incomplete: false };
+    const data = candidates.flatMap((entry) => {
+      const kind = kinds.get(entry.symbol);
+      return kind ? [{
+        ...entry, kind, provider, providerSymbol: entry.symbol,
+        config: defaultPatternConfig as unknown as Prisma.InputJsonValue,
+      }] : [];
+    });
+    const created = data.length ? await this.db.instrument.createManyAndReturn({
+      data, skipDuplicates: true, select: { symbol: true, kind: true },
+    }) : [];
+    const createdSymbols = new Set(created.map(({ symbol }) => symbol));
+    return {
+      added: created,
+      existing: [...entries.keys()].filter((symbol) => existingSymbols.has(symbol) ||
+        (kinds.has(symbol) && !createdSymbols.has(symbol))),
+      unresolved: candidates.filter(({ symbol }) => !kinds.has(symbol)).map(({ symbol }) => symbol),
+      lookupIncomplete: incomplete,
+    };
   }
 
   async importHistory(symbol: string, from?: Date, to?: Date): Promise<number> {
