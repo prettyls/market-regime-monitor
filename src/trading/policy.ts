@@ -16,11 +16,15 @@ export const proposalSchema = z.object({
 export const policySchema = z.object({
   version: z.string().min(1),
   enabled: z.boolean().default(false),
-  allowedSymbols: z.array(z.string().regex(/^[A-Z][A-Z0-9.\-]{0,14}$/)).min(1),
   maxOrderDollars: z.number().positive().max(1000000),
   maxDailyDollars: z.number().positive().max(1000000),
   maxAnalysisAgeHours: z.number().positive().max(168),
 }).strict();
+// Accept legacy environment settings while deriving eligible symbols from the registry.
+export const simulationPolicyConfigSchema = policySchema.extend({
+  allowedSymbols: z.unknown().optional(),
+}).transform(({ allowedSymbols: _allowedSymbols, ...policy }) => policy);
+
 export type TradingPolicy = z.infer<typeof policySchema>;
 export type ProposalInput = z.infer<typeof proposalSchema>;
 export function notionalUnits(input: ProposalInput): number {
@@ -31,7 +35,6 @@ export function notionalUnits(input: ProposalInput): number {
 }
 export function validatePolicy(input: ProposalInput, policy: TradingPolicy, analysisDate: Date, now = new Date()): void {
   if (!policy.enabled) throw new Error("Trading proposals are paused");
-  if (!policy.allowedSymbols.includes(input.symbol)) throw new Error("Symbol is not allowed by policy");
   if (notionalUnits(input) > Math.floor(policy.maxOrderDollars * 10000)) throw new Error("Order exceeds policy limit");
   const age = now.getTime() - analysisDate.getTime();
   if (age < 0 || age > policy.maxAnalysisAgeHours * 3600000) throw new Error("Analysis is stale or future dated");

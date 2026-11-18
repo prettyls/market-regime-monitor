@@ -20,7 +20,8 @@ it.each([undefined, "user", "admin"])("enforces admin role %s on all protected r
   const portfolio = vi.fn(async () => Response.json([])); vi.stubGlobal("fetch", portfolio);
   vi.stubEnv("SCHWAB_TRADE_ACCESS_TOKEN", "private");
   const app = Fastify(); registerAccess(app);
-  registerTradingRoutes(app, { analysis: { findMany: work } } as unknown as PrismaClient);
+  const instruments = vi.fn(async () => []);
+  registerTradingRoutes(app, { analysis: { findMany: work }, instrument: { findMany: instruments } } as unknown as PrismaClient);
   try {
     for (const [method, url] of targets) {
       for (const authorization of [undefined, "Bearer invalid", `Basic ${Buffer.from(`admin:${"b".repeat(32)}`).toString("base64")}`]) {
@@ -34,6 +35,7 @@ it.each([undefined, "user", "admin"])("enforces admin role %s on all protected r
       }
     }
     expect(work).not.toHaveBeenCalled(); expect(portfolio).not.toHaveBeenCalled();
+    expect(instruments).not.toHaveBeenCalled();
     if (role === "admin") {
       const result = await app.inject({ url: "/api/v1/agent/context", headers: { authorization: `Bearer ${token}` } });
       expect(result.statusCode).toBe(200); expect(work).toHaveBeenCalledOnce();
@@ -69,7 +71,12 @@ it.each([
   ]);
   const tx = {
     $executeRaw: vi.fn(),
-    instrument: { findUnique: async ({ where }: { where: { symbol: string } }) => instruments.get(where.symbol) ?? null },
+    instrument: {
+      findUnique: async ({ where }: { where: { symbol: string; active: boolean; kind: { in: string[] } } }) => {
+        const instrument = instruments.get(where.symbol);
+        return instrument?.active === where.active && where.kind.in.includes(instrument.kind) ? instrument : null;
+      },
+    },
     liveOrder: {
       findUnique: async () => persisted,
       aggregate: async () => ({ _sum: { notional: null } }),
@@ -82,6 +89,7 @@ it.each([
   const app = Fastify();
   registerAccess(app);
   registerTradingRoutes(app, {
+    instrument: { findMany: async () => [{ symbol: "AAPL" }, { symbol: "SPY" }] },
     $transaction: async (callback: (client: typeof tx) => unknown) => callback(tx),
     liveOrder: {
       update: async ({ data }: { data: { status: string; brokerOrderId: string } }) => {
@@ -94,6 +102,7 @@ it.each([
     const headers = { authorization: `Bearer ${token}` };
     const permission = await app.inject({ url: "/api/v1/agent/live-orders/permission", headers });
     expect(permission.json().enabled).toBe(enabled === "true");
+    if (enabled === "true") expect(permission.json().allowedSymbols).toEqual(["AAPL", "SPY"]);
     const payload = {
       symbol: side === "BUY" ? "AAPL" : "SPY", side, quantity: 1, orderType: "LIMIT", limitPrice: "100.00",
       timeInForce: "DAY", reason: "Test mock order", idempotencyKey: "live-test-key",

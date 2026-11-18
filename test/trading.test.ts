@@ -14,10 +14,10 @@ describe("trading boundary", () => {
       expect(proposalSchema.safeParse({ ...input, ...patch }).success).toBe(false);
     }
   });
-  it("enforces pause, symbols, size and freshness independently", () => {
+  it("enforces pause, size and freshness independently", () => {
     const order = proposalSchema.parse(input);
     expect(() => validatePolicy(order, policy, new Date())).not.toThrow();
-    for (const patch of [{ enabled: false }, { allowedSymbols: ["QQQ"] }, { maxOrderDollars: 200 }]) {
+    for (const patch of [{ enabled: false }, { maxOrderDollars: 200 }]) {
       expect(() => validatePolicy(order, { ...policy, ...patch }, new Date())).toThrow();
     }
     expect(() => validatePolicy(order, policy, new Date(0))).toThrow("stale");
@@ -58,23 +58,23 @@ describe("trading boundary", () => {
     expect(tx.tradingAuditEvent.create).toHaveBeenCalledTimes(1);
     await app.close();
   });
-  it.each(["EQUITY", "ETF", "INDEX", "RATE", "COMMODITY", "OTHER", null])("checks the target instrument type: %s", async kind => {
+  it.each([["EQUITY", true], ["ETF", true], ["ETF", false], ["INDEX", true], [null, false]])("checks target eligibility: %s, active=%s", async (kind, active) => {
     vi.stubEnv("AGENT_CREDENTIALS_JSON", JSON.stringify([{ role: "admin", id: "agent", token: "x".repeat(32), scopes: ["trades:propose"] }]));
     vi.stubEnv("TRADING_POLICY_JSON", JSON.stringify(policy));
     const create = vi.fn(async ({ data }) => ({ id: "p1", ...data }));
+    const allowed = active && (kind === "EQUITY" || kind === "ETF");
     const tx = {
       $executeRaw: vi.fn(),
-      instrument: { findUnique: vi.fn(async () => kind ? { symbol: "SPY", kind } : null) },
+      instrument: { findUnique: vi.fn(async () => allowed ? { symbol: "QQQ", kind, active } : null) },
       analysis: { findUnique: async () => ({ id: "a1", timestamp: new Date(), instrument: { symbol: "VIX", kind: "INDEX" } }) },
       tradeProposal: { findUnique: async () => null, findMany: async () => [], create },
       tradingAuditEvent: { create: vi.fn() },
     };
     const app = Fastify();
     registerTradingRoutes(app, { $transaction: async (fn: any) => fn(tx) } as unknown as PrismaClient);
-    const response = await app.inject({ method: "POST", url: "/api/v1/trade-proposals", headers: { authorization: `Bearer ${"x".repeat(32)}` }, payload: input });
-    const allowed = kind === "EQUITY" || kind === "ETF";
+    const response = await app.inject({ method: "POST", url: "/api/v1/trade-proposals", headers: { authorization: `Bearer ${"x".repeat(32)}` }, payload: { ...input, symbol: "QQQ" } });
     expect(response.statusCode).toBe(allowed ? 201 : 422);
-    expect(tx.instrument.findUnique).toHaveBeenCalledWith({ where: { symbol: "SPY" } });
+    expect(tx.instrument.findUnique).toHaveBeenCalledWith({ where: { symbol: "QQQ", active: true, kind: { in: ["EQUITY", "ETF"] } } });
     expect(create).toHaveBeenCalledTimes(allowed ? 1 : 0);
     expect(tx.tradingAuditEvent.create).toHaveBeenCalledTimes(allowed ? 1 : 0);
     if (allowed) expect(response.json().snapshot.tradingInstrument.kind).toBe(kind);

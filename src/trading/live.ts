@@ -4,6 +4,7 @@ import type { FastifyInstance } from "fastify";
 import { liveOrderConfig, liveOrderSchema } from "./policy.js";
 import { submitSchwabOrder } from "./schwab.js";
 import { tradeAccessToken } from "./token.js";
+import { eligibleTradingInstrument, listEligibleTradingSymbols } from "./instruments.js";
 
 const receipt = { id: true, status: true, brokerOrderId: true, createdAt: true } as const;
 
@@ -12,6 +13,7 @@ export function registerLiveOrderRoutes(routes: FastifyInstance, db: PrismaClien
     enabled: true,
     maxOrderDollars: config.maxOrderDollars,
     maxDailyDollars: config.maxDailyDollars,
+    allowedSymbols: await listEligibleTradingSymbols(db),
   } : { enabled: false });
   routes.post("/api/v1/agent/live-orders", async (request, reply) => {
     if (!config) return reply.code(403).send({ error: "Agent live trading is disabled" });
@@ -35,8 +37,8 @@ export function registerLiveOrderRoutes(routes: FastifyInstance, db: PrismaClien
       if (notional.gt(config.maxOrderDollars)) {
         return { code: 422, error: "Order exceeds the live per-order limit" } as const;
       }
-      const instrument = await tx.instrument.findUnique({ where: { symbol: input.symbol } });
-      if (!instrument?.active || !["EQUITY", "ETF"].includes(instrument.kind)) {
+      const instrument = await tx.instrument.findUnique({ where: { symbol: input.symbol, ...eligibleTradingInstrument } });
+      if (!instrument) {
         return { code: 422, error: "Live targets must be active registered equities or ETFs" } as const;
       }
       const today = new Date();
