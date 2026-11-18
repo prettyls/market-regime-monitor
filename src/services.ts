@@ -1,6 +1,7 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import type { AnalysisResult, Bar, InstrumentDefinition, PatternConfig } from "./domain/types.js";
 import { CompositeRegimeStrategy } from "./domain/strategy.js";
+import type { HistoryInterval } from "./providers/provider.js";
 import { ProviderRegistry } from "./providers/index.js";
 import { resolveProviderSymbol } from "./providers/symbols.js";
 
@@ -22,10 +23,19 @@ export class MarketService {
     return bars.length;
   }
 
-  async downloadHistory(symbol: string, from?: Date, to?: Date) {
+  async downloadHistory(symbol: string, from?: Date, to?: Date, interval: HistoryInterval = "1d", requireSchwab = false) {
     const instrument = await this.requireInstrument(symbol);
+    const schwabOnly = requireSchwab || interval !== "1d";
+    if (schwabOnly && (instrument.provider !== "charles_schwab" || !this.providers.names().includes("charles_schwab"))) {
+      throw Object.assign(new Error("Schwab market data is unavailable for this instrument"), { statusCode: 503 });
+    }
     const provider = this.providers.get(instrument.provider);
-    return provider.fetchHistory({ symbol: resolveProviderSymbol(instrument), interval: "1d", ...(from ? { from } : {}), ...(to ? { to } : {}) });
+    try {
+      return await provider.fetchHistory({ symbol: resolveProviderSymbol(instrument), interval, ...(from ? { from } : {}), ...(to ? { to } : {}) });
+    } catch (cause) {
+      if (!schwabOnly) throw cause;
+      throw Object.assign(new Error("Schwab price history request failed"), { statusCode: 502 });
+    }
   }
 
   async getHistory(symbol: string, from?: Date, to?: Date) {

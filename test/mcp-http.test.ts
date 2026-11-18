@@ -12,21 +12,27 @@ async function setup(role = "admin", scopes = ["analysis:read"]) {
   const read = vi.fn(async () => []);
   vi.stubEnv("TRADING_POLICY_JSON", undefined);
   const list = vi.fn(async () => [{ symbol: "QQQ" }, { symbol: "SPY" }]);
-  registerTradingRoutes(app, { analysis: { findMany: read }, instrument: { findMany: list } } as unknown as PrismaClient);
+  const downloadHistory = vi.fn(async () => [
+    { timestamp: new Date("2026-11-06T14:30:00Z"), open: 10, high: 12, low: 9, close: 11, volume: 0 },
+    { timestamp: new Date("2026-11-06T14:35:00Z"), open: 11, high: 13, low: 10, close: 12, volume: 200 },
+    { timestamp: new Date("2026-11-06T14:40:00Z"), open: 12, high: 14, low: 11, close: 13, volume: 250 },
+    { timestamp: new Date("2026-11-06T14:45:00Z"), open: 13, high: 15, low: 12, close: 14 },
+  ]);
+  registerTradingRoutes(app, { analysis: { findMany: read }, instrument: { findMany: list } } as unknown as PrismaClient, undefined, { downloadHistory });
   registerMcpHttp(app);
   await app.ready();
-  return { app, read, list };
+  return { app, read, list, downloadHistory };
 }
 const headers = { authorization: `Bearer ${token}`, accept: "application/json, text/event-stream", "content-type": "application/json" };
 it("serves stateless discovery and delegates tools through scoped API auth", async () => {
-  const { app, read, list } = await setup();
+  const { app, read, list, downloadHistory } = await setup();
   try {
     const init = await app.inject({ method: "POST", url: "/mcp", headers, payload: { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "test", version: "1" } } } });
     expect(init.statusCode).toBe(200);
     expect(init.json().result.serverInfo.name).toBe("market-regime-monitor");
     const tools = await app.inject({ method: "POST", url: "/mcp", headers, payload: { jsonrpc: "2.0", id: 2, method: "tools/list" } });
-    expect(tools.json().result.tools).toHaveLength(8);
-    const call = (name: string) => app.inject({ method: "POST", url: "/mcp", headers, payload: { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name, arguments: {} } } });
+    expect(tools.json().result.tools).toHaveLength(9);
+    const call = (name: string, args = {}) => app.inject({ method: "POST", url: "/mcp", headers, payload: { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name, arguments: args } } });
     const context = (await call("get_trading_context")).json().result;
     expect(JSON.parse(context.content[0].text).policy).toMatchObject({ enabled: false, allowedSymbols: ["QQQ", "SPY"] });
     expect(list).toHaveBeenCalledWith({
@@ -34,6 +40,17 @@ it("serves stateless discovery and delegates tools through scoped API auth", asy
       orderBy: { symbol: "asc" }, select: { symbol: true },
     });
     expect(read).toHaveBeenCalledOnce();
+    const bars = (await call("get_schwab_bars", { symbol: "SPY", interval: "5m" })).json().result;
+    expect(JSON.parse(bars.content[0].text)).toMatchObject({
+      provider: "charles_schwab", symbol: "SPY", interval: "5m",
+      bars: [
+        { volume: 0, volumeChange: null, volumeChangePct: null },
+        { volume: 200, volumeChange: 200, volumeChangePct: null },
+        { volume: 250, volumeChange: 50, volumeChangePct: 25 },
+        { volumeChange: null, volumeChangePct: null },
+      ],
+    });
+    expect(downloadHistory).toHaveBeenCalledWith("SPY", undefined, undefined, "5m", true);
     expect((await call("get_portfolio")).json().result.isError).toBe(true);
     expect((await call("get_live_trading_permission")).json().result.isError).toBe(true);
   } finally { await app.close(); }

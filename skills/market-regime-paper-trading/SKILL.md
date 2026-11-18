@@ -7,6 +7,15 @@ Use the `market-regime-monitor` MCP connection. Read
 [references/workflows.md](references/workflows.md) for tool inputs and the
 separation between scheduled allocation and standalone proposals.
 
+Use `get_schwab_bars` for market candles at the requested interval. For
+five-minute candles, pass `interval: "5m"`. If Schwab is unavailable or returns
+no candles for the requested window, report the data gap and use Schwab as the
+sole source for the request. When analyzing bars, report volume change alongside
+price action for each requested interval. Compare completed bars of the same
+interval and duration, and flag missing volume or partial bars separately.
+For intraday participation across sessions, compare the same time of day
+when those bars are available.
+
 For an authorized trading session, remain active from 09:30 to 16:00 on
 weekdays in `America/New_York`, subject to the exchange calendar and early
 closes. Follow the [session workflow](references/workflows.md#active-trading-session)
