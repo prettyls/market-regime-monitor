@@ -24,7 +24,8 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:seed": "tsx prisma/seed.ts",
+    "calendar:sync": "tsx src/calendar-sync-job.ts"
   },
   "dependencies": {
     "@fastify/sensible": "^6.0.3",

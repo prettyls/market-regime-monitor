@@ -1,9 +1,10 @@
-import { Prisma } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 import { z } from "zod";
-import { readSchwabResource, SchwabPortfolioError } from "./schwab.js";
+import { createHash } from "node:crypto";
+import { SchwabPortfolioError } from "./schwab.js";
 
 const querySchema = z.object({ month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/) });
-const transactionSchema = z.array(z.object({
+export const transactionSchema = z.array(z.object({
   activityId: z.number().int().safe(), time: z.string().datetime({ offset: true }),
   tradeDate: z.string().datetime({ offset: true }).optional(),
   type: z.string(), status: z.string(), netAmount: z.number().finite(),
@@ -15,11 +16,10 @@ const transactionSchema = z.array(z.object({
 }));
 type Transaction = z.infer<typeof transactionSchema>[number];
 const D = Prisma.Decimal;
-const session = (time: string) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(time));
+export const calendarSession = (time: string) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(time));
 
 // Estimates use only observed long-equity lots. No invented opening cost basis.
-export function estimateCalendar(raw: unknown, month: string, historyStart: string, updatedAt: string) {
-  const transactions = transactionSchema.parse(raw);
+export function calculateCalendarDays(transactions: Transaction[]) {
   const lots = new Map<string, Array<{ quantity: Prisma.Decimal; basis: Prisma.Decimal }>>();
   const blocked = new Set<string>();
   const days = new Map<string, { pnl: Prisma.Decimal; closingTrades: number; incomplete: boolean }>();
@@ -28,8 +28,7 @@ export function estimateCalendar(raw: unknown, month: string, historyStart: stri
     if (seen.has(tx.activityId)) continue;
     seen.add(tx.activityId);
     if (tx.status !== "VALID") continue;
-    const date = session(tx.tradeDate ?? tx.time);
-    if (date > `${month}-31`) continue;
+    const date = calendarSession(tx.tradeDate ?? tx.time);
     const day = days.get(date) ?? { pnl: new D(0), closingTrades: 0, incomplete: false };
     days.set(date, day);
     const securities = tx.transferItems.filter(i => i.instrument.assetType !== "CURRENCY");
@@ -63,13 +62,24 @@ export function estimateCalendar(raw: unknown, month: string, historyStart: stri
       day.pnl = day.pnl.plus(new D(tx.netAmount).minus(basis));
     } else { day.incomplete = true; blocked.add(key); }
   }
+  return [...days].sort(([a], [b]) => a.localeCompare(b)).map(([date, day]) => ({
+    date, pnl: day.pnl.toString(), closingTrades: day.closingTrades, incomplete: day.incomplete,
+  }));
+}
+
+const daysSchema = z.array(z.object({
+  date: z.string(), pnl: z.string(), closingTrades: z.number().int(), incomplete: z.boolean(),
+}));
+type Days = z.infer<typeof daysSchema>;
+
+function calendarResponse(days: Days, month: string, historyStart: string, updatedAt: string) {
   let cumulative = new D(0), total = new D(0), complete = true;
   let monthComplete = month !== historyStart.slice(0, 7) || historyStart.endsWith("-01");
-  const rows = [...days].sort(([a], [b]) => a.localeCompare(b)).map(([date, day]) => {
+  const rows = days.filter(day => day.date <= `${month}-31`).map(({ date, ...day }) => {
     complete &&= !day.incomplete;
     cumulative = cumulative.plus(day.pnl);
     if (date.startsWith(month)) { total = total.plus(day.pnl); monthComplete &&= !day.incomplete; }
-    return { date, realizedPnl: day.incomplete ? null : day.pnl.toFixed(4), closingTrades: day.closingTrades, cumulative: complete ? cumulative.toFixed(4) : null };
+    return { date, realizedPnl: day.incomplete ? null : new D(day.pnl).toFixed(4), closingTrades: day.closingTrades, cumulative: complete ? cumulative.toFixed(4) : null };
   });
   return {
     month, currency: "USD", simulated: false, estimated: true, method: "OBSERVED_FIFO", timezone: "America/New_York",
@@ -80,26 +90,23 @@ export function estimateCalendar(raw: unknown, month: string, historyStart: stri
   };
 }
 
-export async function schwabCalendar(query: unknown) {
+export function estimateCalendar(raw: unknown, month: string, historyStart: string, updatedAt: string) {
+  return calendarResponse(calculateCalendarDays(transactionSchema.parse(raw)), month, historyStart, updatedAt);
+}
+
+export const calendarKey = (accountHash?: string) => accountHash
+  ? createHash("sha256").update(accountHash).digest("hex")
+  : "sole-linked-account";
+
+export async function readCalendar(db: PrismaClient, query: unknown, accountHash?: string) {
   const { month } = querySchema.parse(query);
-  const parsed = z.array(z.object({ hashValue: z.string().min(1) })).safeParse(await readSchwabResource("accounts/accountNumbers"));
-  if (!parsed.success) throw new SchwabPortfolioError("SCHWAB_INVALID_RESPONSE", "Schwab returned an invalid account list");
-  const accounts = parsed.data;
-  const configured = process.env.SCHWAB_TRADE_ACCOUNT_HASH;
-  const account = configured ? accounts.find(a => a.hashValue === configured) : accounts.length === 1 ? accounts[0] : undefined;
-  if (!account) throw new SchwabPortfolioError("SCHWAB_ACCOUNT_SELECTION_REQUIRED", "Configure SCHWAB_TRADE_ACCOUNT_HASH for the intended linked trading account", 503);
-  const now = new Date();
-  const monthEnd = new Date(`${month}-01T00:00:00Z`); monthEnd.setUTCMonth(monthEnd.getUTCMonth() + 1); monthEnd.setUTCDate(2);
-  const end = new Date(Math.min(now.getTime(), monthEnd.getTime()));
-  const start = new Date(now.getTime() - 364 * 86400000);
-  if (month < start.toISOString().slice(0, 7) || month > session(now.toISOString()).slice(0, 7)) throw Object.assign(new Error("Requested month is outside available history"), { statusCode: 400 });
-  const raw: unknown[] = [];
-  for (const type of ["TRADE", "RECEIVE_AND_DELIVER"]) {
-    const params = new URLSearchParams({ startDate: start.toISOString(), endDate: end.toISOString(), types: type });
-    const result = await readSchwabResource(`accounts/${encodeURIComponent(account.hashValue)}/transactions?${params}`);
-    if (!Array.isArray(result)) throw new SchwabPortfolioError("SCHWAB_INVALID_RESPONSE", "Schwab returned invalid transaction history");
-    raw.push(...result);
+  const snapshot = await db.schwabCalendarSnapshot.findFirst({
+    where: accountHash ? { accountKey: calendarKey(accountHash) } : { key: calendarKey() },
+    orderBy: { syncedAt: "desc" }, select: { historyStart: true, syncedAt: true, days: true },
+  });
+  if (!snapshot) throw new SchwabPortfolioError("CALENDAR_SYNC_REQUIRED", "Calendar data is awaiting its first sync", 503);
+  if (month < snapshot.historyStart.slice(0, 7) || month > calendarSession(snapshot.syncedAt.toISOString()).slice(0, 7)) {
+    throw Object.assign(new Error("Requested month is outside available history"), { statusCode: 400 });
   }
-  try { return estimateCalendar(raw, month, start.toISOString().slice(0, 10), now.toISOString()); }
-  catch { throw new SchwabPortfolioError("SCHWAB_INVALID_RESPONSE", "Schwab returned unsupported transaction data; P/L is unavailable"); }
+  return calendarResponse(daysSchema.parse(snapshot.days), month, snapshot.historyStart, snapshot.syncedAt.toISOString());
 }

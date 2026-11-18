@@ -12,11 +12,11 @@ async function setup(request: typeof fetch) {
   return { client, close: async () => { await client.close(); await server.close(); } };
 }
 describe("MCP agent adapter", () => {
-  it("discovers all six tools through the MCP protocol", async () => {
+  it("discovers all tools through the MCP protocol", async () => {
     const { client, close } = await setup(vi.fn());
     try {
       const result = await client.listTools();
-      expect(result.tools.map(t => t.name)).toEqual(["get_trading_context", "get_portfolio", "get_paper_portfolio", "get_recent_orders", "propose_trade", "get_trade_proposal"]);
+      expect(result.tools.map(t => t.name)).toEqual(["get_trading_context", "get_portfolio", "get_paper_portfolio", "get_recent_orders", "propose_trade", "get_trade_proposal", "get_live_trading_permission", "place_live_order"]);
       expect(result.tools.find(t => t.name === "propose_trade")?.annotations?.readOnlyHint).toBe(false);
     } finally { await close(); }
   });

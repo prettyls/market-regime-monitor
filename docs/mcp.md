@@ -3,7 +3,7 @@
 The MCP adapter uses the official TypeScript SDK and stdio transport. Any agent
 host supporting local stdio MCP servers can launch it. It calls the existing
 REST API; authorization, instrument restrictions, snapshots, budgets and
-idempotency remain enforced by that API. Execution is simulation only.
+idempotency remain enforced by that API. Live submission requires separate server configuration and scope.
 
 ## Configure
 
@@ -60,10 +60,12 @@ proxy documented in the README; it does not mint Google identity tokens.
 | `get_portfolio` | Actual Schwab accounts, positions and balances | `portfolio:read` |
 | `get_paper_portfolio` | Paper ledger, saved decisions and reports | `portfolio:read` |
 | `get_recent_orders` | Actual broker orders, trailing seven days | `portfolio:read` |
+| `get_live_trading_permission` | Server-side live-order switch and configured limits | `trades:execute` |
+| `place_live_order` | Submit a live Schwab BUY or SELL LIMIT DAY order | `trades:execute` |
 | `propose_trade` | Save a simulated BUY LIMIT DAY proposal | `trades:propose` |
 | `get_trade_proposal` | Read this agent's saved proposal by ID | `trades:propose` |
 
-All six tools are discoverable. The API rejects tools requiring scopes that
+All tools are discoverable. The API rejects tools requiring scopes that
 the configured credential lacks. Portfolio outputs contain private account data;
 connect only agent hosts you intend to receive it.
 
@@ -99,13 +101,13 @@ to retry. Inspect API server logs for detailed diagnostics.
 
 ## Verify
 
-Restart/reconnect your host and check that it discovers all six tools. Ask for
+Restart/reconnect your host and check that it discovers all tools. Ask for
 `get_trading_context` first, then a permitted proposal and `get_trade_proposal`.
 Use the end-to-end REST setup to ensure the analysis, target instrument and
 policy exist first. `npm test` exercises tool discovery, calls and validation
 through an MCP client/server transport, as well as API policy tests.
 
-This is a local stdio bridge to a local or remote API. The API also exposes a remote Streamable HTTP `/mcp` endpoint as described below. Neither transport adds live trading capabilities.
+This is a local stdio bridge to a local or remote API. The API also exposes a remote Streamable HTTP `/mcp` endpoint as described below. Both transports enforce the API server’s [live-order permission](agent-trading.md#enable-agent-live-orders).
 
 ### Inspector environment troubleshooting
 

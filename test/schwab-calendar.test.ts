@@ -1,7 +1,9 @@
 import { afterEach, expect, it, vi } from "vitest";
 vi.mock("../src/trading/schwab.js", async importOriginal => ({ ...await importOriginal<typeof import("../src/trading/schwab.js")>(), readSchwabResource: vi.fn() }));
 import { readSchwabResource } from "../src/trading/schwab.js";
-import { estimateCalendar, schwabCalendar } from "../src/trading/calendar.js";
+import { calendarKey, estimateCalendar, readCalendar } from "../src/trading/calendar.js";
+import { syncCalendar } from "../src/trading/calendar-sync.js";
+import type { PrismaClient } from "@prisma/client";
 const read = vi.mocked(readSchwabResource);
 afterEach(() => { vi.unstubAllEnvs(); vi.useRealTimers(); vi.resetAllMocks(); });
 function trade(id: number, date: string, amount: number, cash: number, extra = {}) {
@@ -32,18 +34,53 @@ it("uses Eastern dates and excludes pending transactions", () => {
   const result = estimateCalendar([trade(1, "2026-11-02", 1, -100, { time: "2026-11-03T01:00:00Z" }), trade(2, "2026-11-03", -1, 120, { status: "PENDING" })], "2026-11", "2026-01-01", "now");
   expect(result.days).toEqual([{ date: "2026-11-02", realizedPnl: "0.0000", closingTrades: 0 }]);
 });
-it("refuses ambiguous accounts before reading transactions", async () => {
-  vi.stubEnv("SCHWAB_TRADE_ACCOUNT_HASH", "");
+it("refuses ambiguous accounts before fetching transactions", async () => {
   read.mockResolvedValue([{ hashValue: "one" }, { hashValue: "two" }]);
-  await expect(schwabCalendar({ month: "2026-11" })).rejects.toMatchObject({ code: "SCHWAB_ACCOUNT_SELECTION_REQUIRED" });
+  await expect(syncCalendar({} as PrismaClient)).rejects.toMatchObject({ code: "SCHWAB_ACCOUNT_SELECTION_REQUIRED" });
   expect(read).toHaveBeenCalledOnce();
 });
-it("reads only the configured linked account and returns aggregated estimates", async () => {
-  vi.useFakeTimers(); vi.setSystemTime(new Date("2026-11-17T17:00:00Z"));
-  vi.stubEnv("SCHWAB_TRADE_ACCOUNT_HASH", "two");
-  read.mockResolvedValueOnce([{ hashValue: "one" }, { hashValue: "two" }]).mockResolvedValueOnce([trade(1, "2026-11-02", 1, -100), trade(2, "2026-11-03", -1, 110)]).mockResolvedValueOnce([]);
-  const result = await schwabCalendar({ month: "2026-11" });
-  expect(read.mock.calls[1]?.[0]).toContain("accounts/two/transactions?");
-  expect(result.totalRealizedPnl).toBe("10.0000");
-  expect(JSON.stringify(result)).not.toContain('"two"');
+
+it("backfills, syncs an overlapping window, and publishes revised P/L from storage", async () => {
+  const opening = trade(1, "2026-10-02", 1, -100);
+  const closing = trade(2, "2026-11-17", -1, 115);
+  let transactions: Array<{ time: Date; payload: unknown }> = [];
+  let snapshot: { accountKey: string; historyStart: string; syncedAt: Date; days: unknown } | null = null;
+  const snapshots = {
+    findUnique: async () => snapshot,
+    findFirst: vi.fn(async () => snapshot),
+    upsert: async ({ update }: { update: NonNullable<typeof snapshot> }) => { snapshot = update; },
+  };
+  const tx = {
+    $executeRaw: vi.fn(),
+    schwabCalendarSnapshot: snapshots,
+    schwabCalendarTransaction: {
+      deleteMany: async ({ where }: { where: { OR?: [{ time: { gte: Date } }] } }) => {
+        const start = where.OR?.[0].time.gte;
+        transactions = start ? transactions.filter(row => row.time < start) : [];
+      },
+      createMany: async ({ data }: { data: typeof transactions }) => { transactions.push(...data); },
+      findMany: async () => transactions,
+    },
+  };
+  const db = { schwabCalendarSnapshot: snapshots, $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx) } as unknown as PrismaClient;
+  const query = { month: "2026-11" };
+  await expect(readCalendar(db, query, "account")).rejects.toMatchObject({ code: "CALENDAR_SYNC_REQUIRED" });
+  read.mockImplementation(async resource => {
+    expect(resource).toMatch(/^accounts\/account\/transactions\?/);
+    if (resource.endsWith("RECEIVE_AND_DELIVER")) return [];
+    if (resource.includes("startDate=2026-11-09")) return [closing];
+    return [opening];
+  });
+  await syncCalendar(db, "account", new Date("2026-11-16T23:00:00Z"));
+  const before = await readCalendar(db, query, "account");
+  expect(before.totalRealizedPnl).toBe("0.0000");
+  await syncCalendar(db, "account", new Date("2026-11-17T23:00:00Z"));
+  read.mockRejectedValue(new Error("Broker unavailable"));
+  await expect(syncCalendar(db, "account", new Date("2026-11-18T23:00:00Z"))).rejects.toThrow("Broker unavailable");
+  const after = await readCalendar(db, query, "account");
+  expect(after.days).toEqual([{ date: "2026-11-17", realizedPnl: "15.0000", closingTrades: 1 }]);
+  expect(after.updatedAt).toBe("2026-11-17T23:00:00.000Z");
+  expect(snapshots.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { accountKey: calendarKey("account") } }));
+  expect(JSON.stringify(after)).not.toContain('"account"');
+  expect(read).toHaveBeenCalledTimes(6);
 });

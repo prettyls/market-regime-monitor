@@ -142,7 +142,7 @@ To roll back application code, send traffic to the previous Cloud Run revision a
 
 The deploy script now uses `--allow-unauthenticated`. Cloud Run's public access setting applies to the service; the application enforces route permissions. Deploy the new application before opening an older revision to public access.
 
-- Public: `/`, `/analysis?symbol=SPY`, `/health`, and GET/HEAD requests for instrument names, latest results, saved individual analysis and alerts.
+- Public: `/`, `/analysis?symbol=SPY`, `/health`, and GET/HEAD requests for instrument names, latest results, saved individual analysis and alerts. The realized P/L calendar and its aggregate data are public.
 - Administrator: `/admin`, `/instruments/new`, instrument creation, imports, analysis execution, history downloads, data, signals, backtests and provider token status.
 - Agent endpoints retain their separate scoped bearer authentication.
 
@@ -220,19 +220,28 @@ For merge deployments, pass the same `DATABASE_SECRET`,
 
 ## Actual Schwab P/L calendar
 
-`/calendar` and `/api/v1/trading/calendar?month=YYYY-MM` require administrator
-Basic authentication and send `Cache-Control: no-store`. The calendar loads on
-opening, on manual Refresh/month navigation, and every hour while open. It reads
-actual Schwab transactions with the separate trading credentials; new results
-require no code push, paper closing report or scheduled paper job.
+`/calendar` and `/api/v1/trading/calendar?month=YYYY-MM` are public. Successful
+calendar data responses are cached per instance for up to 15 seconds. The page
+loads on opening, on manual Refresh/month navigation, and every hour while open.
+Those requests read the latest published PostgreSQL snapshot.
 
-If exactly one account is linked, it is selected automatically. Otherwise set
-`SCHWAB_TRADE_ACCOUNT_HASH` on the API service to the intended linked account's
-encrypted identifier. No account identifier is returned by the calendar.
+The deploy script creates the `<service>-calendar-sync` Cloud Run job and a
+weekday 5:30 p.m. Eastern schedule when the database secret and credential
+prefix are configured. Before publishing the calendar, run the job once to
+backfill up to 364 days of history. With a local database and Schwab credentials
+configured, the equivalent is `npm run calendar:sync`. Later syncs read from
+the last successful sync with a seven-day overlap to catch late updates.
+A failed sync leaves the last successful snapshot available.
+
+Set the same `SCHWAB_TRADE_ACCOUNT_HASH` on the API service and the calendar
+sync job. It selects the account for live orders and calendar data. Live trading
+requires it. If live trading is disabled, the sync can discover a sole linked
+account when the variable is unset on both resources. The job also needs
+Schwab read credentials. The public endpoint returns daily aggregates and
+the last sync time.
 
 Results are explicitly labeled FIFO estimates for observed long-equity trades,
-using net transaction cash amounts including reported fees. The lookback is 364
-days; it is not a permanent since-inception ledger. Missing opening lots,
+using net transaction cash amounts including reported fees. The first sync can backfill up to 364 days. Later syncs retain the locally observed history. Missing opening lots,
 transfers, unsupported instruments and corrections make affected results
 incomplete rather than fabricate a zero. The chart stops at the first incomplete
 cumulative result. Broker tax-lot elections, wash sales and corporate actions

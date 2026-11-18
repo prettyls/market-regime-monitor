@@ -1,6 +1,6 @@
 ---
 name: market-regime-real-trading
-description: Review a real Schwab account's balances, positions, exposure and recent broker orders using market-regime-monitor. Use for real-account reconciliation and trade preparation.
+description: Review a real Schwab account's balances, positions, exposure and recent broker orders using market-regime-monitor. Use for real-account reconciliation, trade preparation and authorized live BUY and SELL limit orders.
 ---
 
 Use the configured `market-regime-monitor` MCP connection. Read actual positions
@@ -32,8 +32,17 @@ of a current quote before assessing a price or timing. Identify assumptions and
 missing inputs that prevent a decision. Use the live account's verified
 restrictions and the user's stated risk limits.
 
-The current connection supports read-only broker access. If asked to place,
-modify or cancel an order, explain the capability limit and provide only the
-requested preparation that the available evidence supports. The proposal tools
-record simulations. Keep them out of the real-account workflow and base any
-claim about an actual order or fill on its broker record.
+Before live submission, call `get_live_trading_permission({})` and verify that
+the server enables execution for this agent, the configured account is the
+intended account, and the order fits the returned limits. Submit only within
+the user's explicit live-trading authorization. Use `place_live_order` for
+a BUY or SELL LIMIT DAY order and use a unique idempotency key per decision.
+Before selling, verify the available long position and account for shares
+committed to working sell orders.
+Use the same payload and key to recover a receipt after a transport failure.
+Reconcile PENDING or UNKNOWN against Schwab order records before considering
+another order. Treat SUBMITTED as broker acceptance and verify fills with
+broker records. Use `get_recent_orders` to check execution status.
+
+Report the capability limit when asked to short sell, cancel, or modify an order.
+Keep simulated proposals out of the real-account workflow.

@@ -192,3 +192,36 @@ model PaperRuleReview {
 
   @@unique([accountId, session, ruleVersion])
 }
+
+model LiveOrder {
+  id             String   @id @default(cuid())
+  agentId        String
+  idempotencyKey String
+  requestHash    String
+  status         String
+  request        Json
+  notional       Decimal  @db.Decimal(18, 4)
+  brokerOrderId  String?
+  createdAt      DateTime @default(now())
+
+  @@unique([agentId, idempotencyKey])
+  @@index([createdAt])
+}
+
+model SchwabCalendarTransaction {
+  accountKey String
+  activityId String
+  time       DateTime
+  payload    Json
+
+  @@id([accountKey, activityId])
+  @@index([accountKey, time])
+}
+
+model SchwabCalendarSnapshot {
+  key          String   @id
+  accountKey   String
+  historyStart String
+  syncedAt     DateTime
+  days         Json
+}

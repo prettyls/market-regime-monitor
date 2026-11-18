@@ -4,21 +4,30 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { z } from "zod";
-import { notionalUnits, policySchema, proposalSchema, validatePolicy } from "./policy.js";
+import { liveOrderConfig, notionalUnits, policySchema, proposalSchema, validatePolicy } from "./policy.js";
+import { registerLiveOrderRoutes } from "./live.js";
 import { readSchwab } from "./schwab.js";
 
 export const agentSchema = z.array(z.object({
   role: z.enum(["admin", "user"]).default("user"),
   id: z.string().min(1), token: z.string().min(32),
-  scopes: z.array(z.enum(["analysis:read", "portfolio:read", "trades:propose"])),
+  scopes: z.array(z.enum(["analysis:read", "portfolio:read", "trades:propose", "trades:execute"])),
 }).strict()).refine(agents => new Set(agents.map(a => a.id)).size === agents.length && new Set(agents.map(a => a.token)).size === agents.length, "Agent IDs and tokens must be unique");
+export function readAgentCredentials() {
+  try {
+    return agentSchema.parse(JSON.parse(process.env.AGENT_CREDENTIALS_JSON ?? "[]"));
+  } catch {
+    throw new Error("Invalid AGENT_CREDENTIALS_JSON");
+  }
+}
+
 const digest = (s: string) => createHash("sha256").update(s).digest();
 const json = (value: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 const error = (message: string, statusCode: number) => Object.assign(new Error(message), { statusCode });
 
-export function registerTradingRoutes(app: FastifyInstance, db: PrismaClient) {
+export function registerTradingRoutes(app: FastifyInstance, db: PrismaClient, liveConfig = liveOrderConfig()) {
   // Configuration is optional; missing configuration denies all agent access.
-  const agents = agentSchema.parse(JSON.parse(process.env.AGENT_CREDENTIALS_JSON ?? "[]"));
+  const agents = readAgentCredentials();
   const policy = policySchema.parse(JSON.parse(process.env.TRADING_POLICY_JSON ?? JSON.stringify({
     version: "paper-v1", enabled: false, allowedSymbols: ["SPY"], maxOrderDollars: 1000,
     maxDailyDollars: 5000, maxAnalysisAgeHours: 96,
@@ -30,10 +39,12 @@ export function registerTradingRoutes(app: FastifyInstance, db: PrismaClient) {
       if (!agent) return reply.code(401).send({ error: "Agent authentication required" });
       if (agent.role !== "admin") return reply.code(403).send({ error: "Administrator role required" });
       const scope = request.url.startsWith("/api/v1/agent/portfolio/") ? "portfolio:read"
-        : request.url.startsWith("/api/v1/agent/context") ? "analysis:read" : "trades:propose";
+        : request.url.startsWith("/api/v1/agent/context") ? "analysis:read"
+        : request.routeOptions.url?.startsWith("/api/v1/agent/live-orders") ? "trades:execute" : "trades:propose";
       if (!agent.scopes.includes(scope)) return reply.code(403).send({ error: "Agent scope required", scope });
       request.agentId = agent.id;
     });
+    registerLiveOrderRoutes(routes, db, liveConfig);
     routes.get("/api/v1/agent/context", async () => ({
       mode: "SIMULATION", policy,
       analyses: await db.analysis.findMany({ orderBy: { timestamp: "desc" }, take: 100,

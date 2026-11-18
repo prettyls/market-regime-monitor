@@ -190,4 +190,24 @@ elif [[ "${_TRADE_REFRESH_ENABLED:-false}" != "true" && "$trade_scheduler_state"
   gcloud scheduler jobs pause "$trade_job" --project="$PROJECT_ID" --location="${_REGION}" --quiet
 fi
 
+# The public calendar serves the last successful private transaction sync.
+if [[ "${_DATABASE_SECRET}" != "none" && "${_CREDENTIAL_SECRET_PREFIX:-none}" != "none" ]]; then
+  calendar_job="${_SERVICE_NAME}-calendar-sync"
+  gcloud run jobs deploy "$calendar_job" "${job_args[@]}" "${trade_secret_args[@]}" \
+    --image="$app_image" --command=node --args=dist/src/calendar-sync-job.js
+  gcloud run jobs add-iam-policy-binding "$calendar_job" \
+    --project="$PROJECT_ID" --region="${_REGION}" \
+    --member="serviceAccount:${service_account}" --role=roles/run.invoker --quiet >/dev/null
+  calendar_scheduler_args=(--project="$PROJECT_ID" --location="${_REGION}"
+    --schedule="30 17 * * 1-5" --time-zone=America/New_York --http-method=POST
+    --uri="https://run.googleapis.com/v2/projects/${PROJECT_ID}/locations/${_REGION}/jobs/${calendar_job}:run"
+    --oauth-service-account-email="$service_account"
+    --description="Sync Schwab transactions and publish the realized P/L calendar")
+  if gcloud scheduler jobs describe "$calendar_job" --project="$PROJECT_ID" --location="${_REGION}" >/dev/null 2>&1; then
+    gcloud scheduler jobs update http "$calendar_job" "${calendar_scheduler_args[@]}"
+  else
+    gcloud scheduler jobs create http "$calendar_job" "${calendar_scheduler_args[@]}"
+  fi
+fi
+
 echo "Release ${SHORT_SHA} deployed in ${_REGION}."
