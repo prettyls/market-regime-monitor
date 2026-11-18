@@ -23,11 +23,12 @@ it("serves stateless discovery and delegates tools through scoped API auth", asy
     expect(init.statusCode).toBe(200);
     expect(init.json().result.serverInfo.name).toBe("market-regime-monitor");
     const tools = await app.inject({ method: "POST", url: "/mcp", headers, payload: { jsonrpc: "2.0", id: 2, method: "tools/list" } });
-    expect(tools.json().result.tools).toHaveLength(6);
+    expect(tools.json().result.tools).toHaveLength(8);
     const call = (name: string) => app.inject({ method: "POST", url: "/mcp", headers, payload: { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name, arguments: {} } } });
     expect((await call("get_trading_context")).json().result.isError).not.toBe(true);
     expect(read).toHaveBeenCalledOnce();
     expect((await call("get_portfolio")).json().result.isError).toBe(true);
+    expect((await call("get_live_trading_permission")).json().result.isError).toBe(true);
   } finally { await app.close(); }
 });
 it("rejects invalid tokens, non-admin roles, and cross-origin requests", async () => {

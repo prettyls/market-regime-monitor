@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { proposalSchema } from "../trading/policy.js";
+import { liveOrderSchema, proposalSchema } from "../trading/policy.js";
 
 export interface AgentApiConfig { apiUrl: string; agentToken: string }
 export class McpConfigError extends Error {}
@@ -20,7 +20,7 @@ export function validateConfig(config: AgentApiConfig): AgentApiConfig {
 export function createTradingMcpServer(config: AgentApiConfig, request: typeof fetch = fetch) {
   const { apiUrl, agentToken } = validateConfig(config);
   const server = new McpServer({ name: "market-regime-monitor", version: "0.1.0" }, {
-    instructions: "Trading is SIMULATION ONLY. Read context and policy before proposing a trade. SIMULATED does not mean a broker order or fill. Reuse the exact proposal and idempotency key after an uncertain result. Source analysis may differ from the trading instrument. Never request Schwab credentials.",
+    instructions: "propose_trade is simulation only. Live orders use place_live_order and require server permission. Read context and policy before proposing a trade. SIMULATED does not mean a broker order or fill. Reuse the exact proposal and idempotency key after an uncertain result. Source analysis may differ from the trading instrument. Never request Schwab credentials.",
   });
   async function call(path: string, body?: unknown) {
     try {
@@ -35,7 +35,9 @@ export function createTradingMcpServer(config: AgentApiConfig, request: typeof f
           400: "Invalid proposal input.", 401: "Check the MCP agent token.", 403: "Agent requires an explicit admin role and the required API scope; restart the API after updating credentials.",
           404: "Analysis or proposal not found, or proposal belongs to another agent.",
           409: "Idempotency conflict or concurrent request; retry the identical request with the same key.",
-          422: "Policy rejected the proposal; check registered EQUITY/ETF symbol, allowlist, analysis age and budgets.",
+          422: path === "/api/v1/agent/live-orders"
+            ? "Check that the target is an active registered EQUITY or ETF and that the order fits the live limits."
+            : "Policy rejected the proposal; check registered EQUITY/ETF symbol, allowlist, analysis age and budgets.",
           502: "Schwab upstream request failed; check API server diagnostics and trading authorization.",
           503: "Service or Schwab authorization unavailable.",
         };
@@ -44,7 +46,7 @@ export function createTradingMcpServer(config: AgentApiConfig, request: typeof f
       const data: unknown = await response.json();
       return { content: [{ type: "text" as const, text: JSON.stringify(data) }] };
     } catch {
-      return { isError: true, content: [{ type: "text" as const, text: "Agent API connection or response failed. For a proposal, the outcome may be uncertain: retry the exact request with the same idempotency key." }] };
+      return { isError: true, content: [{ type: "text" as const, text: "Agent API connection or response failed. For a submission, the outcome may be uncertain. Replay the exact request with the same idempotency key to recover the stored result." }] };
     }
   }
   const readAnnotations = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true };
@@ -58,5 +60,15 @@ export function createTradingMcpServer(config: AgentApiConfig, request: typeof f
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
   }, input => call("/api/v1/trade-proposals", input));
   server.registerTool("get_trade_proposal", { description: "Read one saved simulation owned by this agent.", inputSchema: z.object({ id: z.string().min(1).max(128) }).strict(), annotations: readAnnotations }, ({ id }) => call(`/api/v1/trade-proposals/${encodeURIComponent(id)}`));
+  server.registerTool("get_live_trading_permission", {
+    description: "Check whether this agent is authorized to use live order submission.",
+    inputSchema: z.object({}).strict(),
+    annotations: readAnnotations,
+  }, () => call("/api/v1/agent/live-orders/permission"));
+  server.registerTool("place_live_order", {
+    description: "Submit a real Schwab BUY or SELL LIMIT DAY order for the server-configured account. Requires live trading permission and user-authorized scope. On uncertainty, reuse the exact payload and key to check the saved result. PENDING or UNKNOWN requires broker reconciliation. SUBMITTED does not mean filled.",
+    inputSchema: liveOrderSchema,
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
+  }, input => call("/api/v1/agent/live-orders", input));
   return server;
 }

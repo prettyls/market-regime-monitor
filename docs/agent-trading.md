@@ -1,9 +1,8 @@
-# Agent trading: simulation milestone
+# Agent trading
 
 The API supports authenticated agents reading analyses and Schwab portfolio data,
-then submitting persisted hypothetical BUY limit orders. It never submits,
-modifies, or cancels broker orders. No live execution worker or approval route is
-implemented in this milestone.
+submitting hypothetical BUY limit proposals, and submitting authorized live
+BUY and SELL limit orders when explicitly enabled.
 
 ## Setup
 
@@ -20,8 +19,7 @@ TRADING_POLICY_JSON='{"version":"paper-v1","enabled":true,"allowedSymbols":["SPY
 Omitting credentials denies all access to the new endpoints. Omitting policy
 configuration pauses proposals. Credentials must have unique IDs and tokens.
 Policies and credentials are loaded at startup; restart every replica to change
-them, including to pause proposals. This is not an immediate operational kill
-switch for a future live trading system.
+them, including to pause proposals. To disable live access, deploy the disabled setting to every API replica.
 
 Use HTTPS outside localhost. All new endpoints require `Authorization: Bearer
 <agent-token>`. Cloud Run IAM remains an additional access gate: use the existing
@@ -96,11 +94,33 @@ quotes, sessions, tradability, cash, liquidity, spread, fees or actual fills, an
 is not a simulated portfolio ledger or strategy-performance backtest. Read-only
 Schwab positions are never modified. A SIMULATED result is not a broker fill.
 
-Before live execution, add centrally persisted and coordinated OAuth refresh,
-account entitlements, validated strategy mappings, fresh quotes, portfolio
-reservations, human approval UI, immediate kill switch,
-durable execution queue, broker reconciliation and uncertain-submission handling.
-The [MCP stdio adapter](mcp.md) wraps these same authenticated services.
+## Enable agent live orders
+
+On the API server, set `SCHWAB_TRADE_ACCOUNT_HASH` to the intended Schwab
+account hash and set `AGENT_LIVE_TRADING_ENABLED=true`. Configure
+`AGENT_LIVE_TRADING_JSON` with `maxOrderDollars` and `maxDailyDollars`. Grant `trades:execute` only to the
+authorized admin agent in `AGENT_CREDENTIALS_JSON`. Apply the database
+migration and restart all API instances. Local `.env` applies to the local API.
+Set the variables on the deployment when MCP connects to a remote API.
+
+The live endpoint accepts whole-share BUY and SELL LIMIT DAY orders for Schwab's
+normal trading session. It uses the configured account. The instrument registry is the live
+whitelist. Targets must be active registered equities or ETFs. The daily
+budget counts the combined notional of submitted and unresolved buys and sells
+and resets at midnight UTC.
+Other account activity is outside that budget. Schwab determines eligibility,
+buying power, timing and execution. The API records a reservation before
+making one submission attempt. Reuse the exact request and key to read the
+saved receipt. Reconcile PENDING or UNKNOWN in Schwab before placing another
+order for the same decision. SUBMITTED means Schwab returned an order ID.
+Use the broker record to verify fills. The public live P/L calendar uses
+the same account while live execution is enabled. It updates after the closing transaction is imported by the after-close sync.
+An open page refreshes hourly. Older positions with missing basis may show incomplete P/L.
+
+The agent checks permission with `get_live_trading_permission` and submits
+with `place_live_order`. The corresponding endpoints are
+`GET /api/v1/agent/live-orders/permission` and `POST /api/v1/agent/live-orders`.
+The [MCP setup](mcp.md) covers both transports.
 
 ## Separate Schwab connections
 

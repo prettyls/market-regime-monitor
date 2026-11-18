@@ -36,3 +36,32 @@ export function validatePolicy(input: ProposalInput, policy: TradingPolicy, anal
   const age = now.getTime() - analysisDate.getTime();
   if (age < 0 || age > policy.maxAnalysisAgeHours * 3600000) throw new Error("Analysis is stale or future dated");
 }
+
+export const liveOrderSchema = proposalSchema
+  .omit({ analysisId: true, strategyId: true })
+  .extend({ side: z.enum(["BUY", "SELL"]) });
+export type LiveOrderInput = z.infer<typeof liveOrderSchema>;
+
+export const liveOrderConfigSchema = policySchema
+  .pick({ maxOrderDollars: true, maxDailyDollars: true })
+  .extend({
+    // Ignore retired fields in existing deployments.
+    accountHash: z.unknown().optional(),
+    allowedSymbols: z.unknown().optional(),
+  })
+  .transform(({ accountHash: _accountHash, allowedSymbols: _allowedSymbols, ...limits }) => limits);
+
+const accountHashSchema = z.string().regex(/^[a-zA-Z0-9_-]+$/).max(256);
+export const configuredSchwabAccountHash = () => process.env.SCHWAB_TRADE_ACCOUNT_HASH || undefined;
+
+export function liveOrderConfig() {
+  if (process.env.AGENT_LIVE_TRADING_ENABLED !== "true") return undefined;
+  const account = accountHashSchema.safeParse(configuredSchwabAccountHash());
+  if (!account.success) throw new Error("Invalid or missing SCHWAB_TRADE_ACCOUNT_HASH for live trading");
+  try {
+    const limits = liveOrderConfigSchema.parse(JSON.parse(process.env.AGENT_LIVE_TRADING_JSON ?? "{}"));
+    return { ...limits, accountHash: account.data };
+  } catch {
+    throw new Error("Invalid AGENT_LIVE_TRADING_JSON");
+  }
+}

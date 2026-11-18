@@ -20,12 +20,12 @@ it("publishes only reported sessions and totals daily realized P/L precisely", a
   expect(db.paperRun.findMany.mock.calls[0]).toEqual([{ where: expect.objectContaining({ status: "EXECUTED", session: { in: result.days.map(d => d.date) } }), select: { session: true, execution: true } }]);
   await expect(realizedCalendar(db as any, { month: "2026-13" })).rejects.toThrow();
 });
-it("protects the actual-account calendar while retaining the public paper data endpoint", async () => {
+it("links to the public calendar and retains the public paper data endpoint", async () => {
   const app = Fastify();
   registerAccess(app);
   app.get('/calendar', async () => calendarHtml);
   app.get('/api/v1/paper/calendar', async () => ({ days: [] }));
-  expect((await app.inject('/calendar')).statusCode).toBe(401);
+  expect((await app.inject('/calendar')).statusCode).toBe(200);
   expect((await app.inject('/api/v1/paper/calendar?month=2026-11')).statusCode).toBe(200);
   expect(uiHtml).toContain('href="/calendar"');
   expect(() => new Script(calendarHtml.match(/<script>([\s\S]*?)<\/script>/)![1]!)).not.toThrow();
@@ -50,17 +50,19 @@ it("carries prior months into the chart while keeping calendar totals monthly", 
   expect(db.paperReport.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ session: { lte: "2026-11-31" } }) }));
 });
 
-it("requires admin authentication and disables caching for actual-account P/L", async () => {
-  vi.stubEnv("ADMIN_PASSWORD", "calendar-test-password-12345678901234567890");
+it("serves the actual-account P/L page and aggregates without administrator credentials", async () => {
+  vi.stubEnv("ADMIN_PASSWORD", "");
   const app = Fastify();
   try {
     registerAccess(app);
     const handler = vi.fn(async () => ({ simulated: false, totalRealizedPnl: "1.0000" }));
-    app.get('/api/v1/trading/calendar', handler);
-    expect((await app.inject('/api/v1/trading/calendar?month=2026-11')).statusCode).toBe(401);
-    expect(handler).not.toHaveBeenCalled();
-    const response = await app.inject({ url: '/api/v1/trading/calendar?month=2026-11', headers: { authorization: `Basic ${Buffer.from(`admin:${process.env.ADMIN_PASSWORD}`).toString('base64')}` } });
+    app.get("/calendar", async () => calendarHtml);
+    app.get("/api/v1/trading/calendar", handler);
+    expect((await app.inject("/calendar")).statusCode).toBe(200);
+    const response = await app.inject("/api/v1/trading/calendar?month=2026-11");
     expect(response.statusCode).toBe(200);
-    expect(response.headers['cache-control']).toBe('no-store');
+    expect(response.headers["www-authenticate"]).toBeUndefined();
+    expect(response.json()).toEqual({ simulated: false, totalRealizedPnl: "1.0000" });
+    expect(handler).toHaveBeenCalledOnce();
   } finally { await app.close(); vi.unstubAllEnvs(); }
 });

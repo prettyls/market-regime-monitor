@@ -1,11 +1,11 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import { agentSchema } from "../trading/routes.js";
+import { readAgentCredentials } from "../trading/routes.js";
 import { createTradingMcpServer } from "./server.js";
 
 export function registerMcpHttp(app: FastifyInstance) {
-  const agents = agentSchema.parse(JSON.parse(process.env.AGENT_CREDENTIALS_JSON ?? "[]"));
+  const agents = readAgentCredentials();
   const digest = (value: string) => createHash("sha256").update(value).digest();
   app.route({ method: ["GET", "POST", "DELETE"], url: "/mcp", handler: async (request, reply) => {
     const token = request.headers.authorization?.match(/^Bearer (.+)$/)?.[1] ?? "";

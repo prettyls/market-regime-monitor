@@ -117,12 +117,11 @@ async function main(): Promise<void> {
   let tokenData;
   try {
     tokenData = await manager.exchangeCode(code, state);
-  } catch (err) {
+  } catch {
     console.error("\nToken exchange failed. This usually means:");
     console.error("  - the authorization code already expired or was already used (codes are single-use, ~30s lifetime)");
     console.error("  - the redirect URI used to request the code doesn't exactly match the selected connection redirect URI");
     console.error("  - selected connection client credentials don't match the app that generated the authorization URL");
-    console.error("\nUnderlying error:\n", err);
     process.exit(1);
   }
 
@@ -145,14 +144,13 @@ async function main(): Promise<void> {
       if (!response.ok) throw new Error(`Schwab trading authorization check failed (HTTP ${response.status})`);
       console.log("Trading account authorization verified; no account data displayed.");
     }
-  } catch (err) {
-    console.error("\nThe new token was issued but the live API call failed. Diagnostics:\n");
-    console.error(err);
+  } catch {
+    console.error("\nThe new token was issued but the live API check failed.");
     process.exit(1);
   }
 }
 
-main().catch((err) => {
-  console.error("Schwab OAuth flow failed:", err);
+main().catch(() => {
+  console.error("Schwab OAuth flow failed. Check the redirect URL and connection configuration.");
   process.exit(1);
 });

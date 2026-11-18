@@ -38,6 +38,13 @@ reassess at the next eligible session. Do not bypass the restriction for a stop,
 a bearish signal, or a session close. Flag conflicting server rules for operator
 resolution; skill text does not add engine-level enforcement.
 
+The paper-trading universe includes equities and ETFs across tickers. Confirm
+the target is registered as EQUITY or ETF and eligible under the relevant
+server policy. Use indices only for market context or benchmarking. Exclude
+indices from trade proposals and allocation targets. An ETF that tracks an
+index is eligible on its own merits. Treat SPY as an example and possible
+benchmark, with the same eligibility checks as any other ETF.
+
 Apply the returned rules and server limits. Increase a paper allocation only
 when the target instrument's regime, signed score and heuristic confidence meet
 the configured entry criteria. Honor bearish exits when the holding is eligible

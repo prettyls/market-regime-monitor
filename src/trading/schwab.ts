@@ -7,7 +7,6 @@ export class SchwabPortfolioError extends Error {
   }
 }
 
-// Deliberately read-only: no broker mutation method is exposed in this milestone.
 export async function readSchwab(path: "accounts" | "orders"): Promise<unknown> {
   const query = path === "accounts" ? "?fields=positions" : (() => {
     const end = new Date();
@@ -40,4 +39,35 @@ export async function readSchwabResource(resource: string): Promise<unknown> {
   }
   try { return await response.json(); }
   catch { throw new SchwabPortfolioError("SCHWAB_INVALID_RESPONSE", "Schwab returned an invalid portfolio response"); }
+}
+
+/** A failed or ambiguous transport must never cause this POST to be retried. */
+export async function submitSchwabOrder(
+  token: string,
+  accountHash: string,
+  order: import("./policy.js").LiveOrderInput,
+) {
+  const response = await fetch(`https://api.schwabapi.com/trader/v1/accounts/${encodeURIComponent(accountHash)}/orders`, {
+    method: "POST",
+    redirect: "error",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    signal: AbortSignal.timeout(15000),
+    body: JSON.stringify({
+      orderType: order.orderType,
+      session: "NORMAL",
+      duration: order.timeInForce,
+      price: Number(order.limitPrice),
+      orderStrategyType: "SINGLE",
+      orderLegCollection: [{
+        instruction: order.side,
+        quantity: order.quantity,
+        instrument: { symbol: order.symbol, assetType: "EQUITY" },
+      }],
+    }),
+  });
+  const brokerOrderId = response.headers.get("location")?.match(/\/orders\/(\d+)\/?$/)?.[1];
+  await response.body?.cancel().catch(() => {});
+  if (response.status === 201 && brokerOrderId) return { status: "SUBMITTED", brokerOrderId };
+  if ([400, 401, 403, 404, 422, 429].includes(response.status)) return { status: "REJECTED" };
+  return { status: "UNKNOWN" };
 }
