@@ -139,6 +139,7 @@ Each entry requires `symbol`, `name`, `kind`, `provider`, and `providerSymbol`. 
 | GET | `/instruments/new` | Web UI form to add an instrument |
 | GET | `/health` | Liveness check |
 | GET/POST | `/api/v1/instruments` | List or configure instruments |
+| POST | `/api/v1/instruments/import-csv` | Admin-only watchlist CSV import |
 | POST | `/api/v1/instruments/:symbol/import?from=YYYY-MM-DD&to=YYYY-MM-DD` | Import/upsert history |
 | GET | `/api/v1/instruments/:symbol/data` | Recent stored bars |
 | POST | `/api/v1/instruments/:symbol/analyze` | Run and persist analysis/transition alert |
@@ -160,6 +161,10 @@ Each entry requires `symbol`, `name`, `kind`, `provider`, and `providerSymbol`. 
 Open `http://localhost:3000/` while the API is running. Select an instrument to load its latest analysis, then use **Import data** (optional from/to dates), **Run analysis**, or **Load latest** to call the API. The page shows the color-coded status, regime, score, confidence, detector signals, evidence, and recent alerts for the instrument.
 
 Use **Add instrument** in the header (or open `http://localhost:3000/instruments/new`) to add an instrument. The form takes the symbol, name, kind, provider (only providers enabled by `DATA_PROVIDER` are listed), and provider symbol (defaults to the symbol), with an optional pattern config prefilled with the defaults. Saving an existing symbol asks for confirmation before overwriting it, and success returns to the monitor with the new instrument selected.
+
+Under **Admin → Add instrument**, use **Import instruments from CSV** to upload a watchlist. Select the data provider and choose the export file. Charles Schwab is the supported CSV format and appears when configured as the data provider. The importer reads the `Symbol` column as `ticker, name`, checks [Nasdaq Trader's symbol directories](https://nasdaqtrader.com/Trader.aspx?id=SymbolDirDefs) for equity or ETF classification, and applies the default pattern configuration. It reports existing symbols and symbols whose classification could not be confirmed.
+
+The CSV endpoint accepts a JSON body with a `provider` identifier (currently `charles_schwab`) and the file contents as a `csv` string. The response includes `added`, `existing`, `unresolved`, and `lookupIncomplete`.
 
 Example instrument body:
 

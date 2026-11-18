@@ -39,3 +39,47 @@ it.each([50, 1725])("analyzes and saves the latest bar with %i stored bars", asy
     create: expect.objectContaining({ timestamp: stored.at(-1)!.timestamp })
   }));
 });
+
+it("imports a Schwab watchlist without overwriting existing instruments or guessing unknown kinds", async () => {
+  const nasdaq = [
+    "Symbol|Security Name|Test Issue|ETF",
+    "AMD|Advanced Micro Devices, Inc. - Common Stock|N|N",
+    "ABCW|ABC Company - Warrants|N|N",
+  ].join("\n");
+  const other = [
+    "ACT Symbol|Security Name|CQS Symbol|ETF|Test Issue|NASDAQ Symbol",
+    "SOXL|Direxion Daily Semiconductor Bull 3X ETF|SOXL|Y|N|SOXL",
+  ].join("\n");
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(url.endsWith("/nasdaqlisted.txt") ? nasdaq : other)));
+  try {
+    const createManyAndReturn = vi.fn().mockResolvedValue([{ symbol: "AMD", kind: "EQUITY" }, { symbol: "SOXL", kind: "ETF" }]);
+    const db = { instrument: { findMany: vi.fn().mockResolvedValue([{ symbol: "INTC" }]), createManyAndReturn } };
+    const providers = new ProviderRegistry([{ name: "charles_schwab", fetchHistory: vi.fn() }]);
+    const service = new MarketService(db as unknown as PrismaClient, providers, console);
+    const csv = [
+      '\uFEFF"Last Price","Symbol"',
+      '"$1,000","amd, Advanced Micro Devices, ""Inc."""',
+      '"$2","SOXL, Semiconductor Fund"',
+      '"$2","SOXL, Repeated"',
+      '"$3","INTC, Intel"',
+      '"$4","ABCW, ABC Company Warrants"',
+    ].join("\r\n");
+
+    await expect(service.importInstrumentCsv("stooq", csv)).rejects.toMatchObject({ statusCode: 400 });
+    await expect(service.importInstrumentCsv("charles_schwab", 'Symbol\n"AMD, incomplete')).rejects.toMatchObject({ statusCode: 400 });
+    await expect(service.importInstrumentCsv("charles_schwab", csv)).resolves.toEqual({
+      added: [{ symbol: "AMD", kind: "EQUITY" }, { symbol: "SOXL", kind: "ETF" }],
+      existing: ["INTC"], unresolved: ["ABCW"], lookupIncomplete: false,
+    });
+    expect(createManyAndReturn).toHaveBeenCalledWith({
+      data: [
+        { symbol: "AMD", name: 'Advanced Micro Devices, "Inc."', kind: "EQUITY", provider: "charles_schwab", providerSymbol: "AMD", config: defaultPatternConfig },
+        { symbol: "SOXL", name: "Semiconductor Fund", kind: "ETF", provider: "charles_schwab", providerSymbol: "SOXL", config: defaultPatternConfig },
+      ],
+      skipDuplicates: true,
+      select: { symbol: true, kind: true },
+    });
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});

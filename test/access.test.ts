@@ -9,7 +9,7 @@ function setup() {
   registerAccess(app);
   const work = vi.fn(async () => ({ ok: true }));
   for (const url of ["/", "/analysis", "/api/v1/instruments", "/api/v1/analyses/latest", "/api/v1/instruments/:symbol/analysis", "/api/v1/alerts", "/instruments/new", "/admin", "/api/v1/auth/token-status", "/api/v1/instruments/:symbol/backtest", "/api/v1/instruments/:symbol/pricehistory"]) app.get(url, work);
-  for (const url of ["/api/v1/instruments", "/api/v1/instruments/:symbol/import", "/api/v1/instruments/:symbol/analyze"]) app.post(url, work);
+  for (const url of ["/api/v1/instruments", "/api/v1/instruments/import-csv", "/api/v1/instruments/:symbol/import", "/api/v1/instruments/:symbol/analyze"]) app.post(url, work);
   return { app, work };
 }
 it("allows public reads and denies administrative routes before work", async () => {
@@ -18,7 +18,7 @@ it("allows public reads and denies administrative routes before work", async () 
   for (const url of ["/", "/analysis?symbol=SPY", "/api/v1/instruments", "/api/v1/analyses/latest", "/api/v1/instruments/SPY/analysis", "/api/v1/alerts?symbol=SPY"]) expect((await app.inject(url)).statusCode).toBe(200);
   work.mockClear();
   for (const url of ["/instruments/new", "/admin", "/api/v1/auth/token-status", "/api/v1/instruments/SPY/backtest", "/api/v1/instruments/SPY/pricehistory"]) expect((await app.inject(url)).statusCode).toBe(401);
-  for (const url of ["/api/v1/instruments", "/api/v1/instruments/SPY/import", "/api/v1/instruments/SPY/analyze"]) expect((await app.inject({ method: "POST", url })).statusCode).toBe(401);
+  for (const url of ["/api/v1/instruments", "/api/v1/instruments/import-csv", "/api/v1/instruments/SPY/import", "/api/v1/instruments/SPY/analyze"]) expect((await app.inject({ method: "POST", url })).statusCode).toBe(401);
   expect(work).not.toHaveBeenCalled();
   expect((await app.inject({ url: "/admin", headers })).statusCode).toBe(200);
   expect((await app.inject({ method: "POST", url: "/api/v1/instruments", headers: { ...headers, origin: "https://evil.example" } })).statusCode).toBe(403);
