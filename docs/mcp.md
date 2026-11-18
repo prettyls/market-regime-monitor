@@ -56,11 +56,11 @@ proxy documented in the README; it does not mint Google identity tokens.
 
 | Tool | Purpose | Required API scope |
 | --- | --- | --- |
-| `get_trading_context` | Saved analyses, policy and simulation mode | `analysis:read` |
+| `get_trading_context` | Saved analyses, simulation policy and eligible symbols | `analysis:read` |
 | `get_portfolio` | Actual Schwab accounts, positions and balances | `portfolio:read` |
 | `get_paper_portfolio` | Paper ledger, saved decisions and reports | `portfolio:read` |
 | `get_recent_orders` | Actual broker orders, trailing seven days | `portfolio:read` |
-| `get_live_trading_permission` | Server-side live-order switch and configured limits | `trades:execute` |
+| `get_live_trading_permission` | Live-order switch, configured limits and eligible symbols when enabled | `trades:execute` |
 | `place_live_order` | Submit a live Schwab BUY or SELL LIMIT DAY order | `trades:execute` |
 | `propose_trade` | Save a simulated BUY LIMIT DAY proposal | `trades:propose` |
 | `get_trade_proposal` | Read this agent's saved proposal by ID | `trades:propose` |

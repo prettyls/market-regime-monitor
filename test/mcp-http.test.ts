@@ -10,14 +10,16 @@ async function setup(role = "admin", scopes = ["analysis:read"]) {
   vi.stubEnv("AGENT_CREDENTIALS_JSON", JSON.stringify([{ id: "test", token, role, scopes }]));
   const app = Fastify(); registerAccess(app);
   const read = vi.fn(async () => []);
-  registerTradingRoutes(app, { analysis: { findMany: read } } as unknown as PrismaClient);
+  vi.stubEnv("TRADING_POLICY_JSON", undefined);
+  const list = vi.fn(async () => [{ symbol: "QQQ" }, { symbol: "SPY" }]);
+  registerTradingRoutes(app, { analysis: { findMany: read }, instrument: { findMany: list } } as unknown as PrismaClient);
   registerMcpHttp(app);
   await app.ready();
-  return { app, read };
+  return { app, read, list };
 }
 const headers = { authorization: `Bearer ${token}`, accept: "application/json, text/event-stream", "content-type": "application/json" };
 it("serves stateless discovery and delegates tools through scoped API auth", async () => {
-  const { app, read } = await setup();
+  const { app, read, list } = await setup();
   try {
     const init = await app.inject({ method: "POST", url: "/mcp", headers, payload: { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "test", version: "1" } } } });
     expect(init.statusCode).toBe(200);
@@ -25,7 +27,12 @@ it("serves stateless discovery and delegates tools through scoped API auth", asy
     const tools = await app.inject({ method: "POST", url: "/mcp", headers, payload: { jsonrpc: "2.0", id: 2, method: "tools/list" } });
     expect(tools.json().result.tools).toHaveLength(8);
     const call = (name: string) => app.inject({ method: "POST", url: "/mcp", headers, payload: { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name, arguments: {} } } });
-    expect((await call("get_trading_context")).json().result.isError).not.toBe(true);
+    const context = (await call("get_trading_context")).json().result;
+    expect(JSON.parse(context.content[0].text).policy).toMatchObject({ enabled: false, allowedSymbols: ["QQQ", "SPY"] });
+    expect(list).toHaveBeenCalledWith({
+      where: { active: true, kind: { in: ["EQUITY", "ETF"] } },
+      orderBy: { symbol: "asc" }, select: { symbol: true },
+    });
     expect(read).toHaveBeenCalledOnce();
     expect((await call("get_portfolio")).json().result.isError).toBe(true);
     expect((await call("get_live_trading_permission")).json().result.isError).toBe(true);

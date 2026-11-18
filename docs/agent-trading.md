@@ -13,7 +13,7 @@ BUY and SELL limit orders when explicitly enabled.
 
 ```dotenv
 AGENT_CREDENTIALS_JSON='[{"id":"research-agent","role":"admin","token":"REPLACE_WITH_RANDOM_TOKEN_AT_LEAST_32_CHARACTERS","scopes":["analysis:read","portfolio:read","trades:propose"]}]'
-TRADING_POLICY_JSON='{"version":"paper-v1","enabled":true,"allowedSymbols":["SPY"],"maxOrderDollars":1000,"maxDailyDollars":5000,"maxAnalysisAgeHours":96}'
+TRADING_POLICY_JSON='{"version":"paper-v1","enabled":true,"maxOrderDollars":1000,"maxDailyDollars":5000,"maxAnalysisAgeHours":96}'
 ```
 
 Omitting credentials denies all access to the new endpoints. Omitting policy
@@ -104,8 +104,7 @@ migration and restart all API instances. Local `.env` applies to the local API.
 Set the variables on the deployment when MCP connects to a remote API.
 
 The live endpoint accepts whole-share BUY and SELL LIMIT DAY orders for Schwab's
-normal trading session. It uses the configured account. The instrument registry is the live
-whitelist. Targets must be active registered equities or ETFs. The daily
+normal trading session. It uses the configured account. Live orders and standalone simulated proposals both target active equities and ETFs in the instrument registry. Any legacy `allowedSymbols` in `TRADING_POLICY_JSON` is ignored. The daily
 budget counts the combined notional of submitted and unresolved buys and sells
 and resets at midnight UTC.
 Other account activity is outside that budget. Schwab determines eligibility,

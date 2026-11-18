@@ -4,7 +4,8 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { z } from "zod";
-import { liveOrderConfig, notionalUnits, policySchema, proposalSchema, validatePolicy } from "./policy.js";
+import { eligibleTradingInstrument, listEligibleTradingSymbols } from "./instruments.js";
+import { liveOrderConfig, notionalUnits, proposalSchema, simulationPolicyConfigSchema, validatePolicy } from "./policy.js";
 import { registerLiveOrderRoutes } from "./live.js";
 import { readSchwab } from "./schwab.js";
 
@@ -28,8 +29,8 @@ const error = (message: string, statusCode: number) => Object.assign(new Error(m
 export function registerTradingRoutes(app: FastifyInstance, db: PrismaClient, liveConfig = liveOrderConfig()) {
   // Configuration is optional; missing configuration denies all agent access.
   const agents = readAgentCredentials();
-  const policy = policySchema.parse(JSON.parse(process.env.TRADING_POLICY_JSON ?? JSON.stringify({
-    version: "paper-v1", enabled: false, allowedSymbols: ["SPY"], maxOrderDollars: 1000,
+  const policy = simulationPolicyConfigSchema.parse(JSON.parse(process.env.TRADING_POLICY_JSON ?? JSON.stringify({
+    version: "paper-v1", enabled: false, maxOrderDollars: 1000,
     maxDailyDollars: 5000, maxAnalysisAgeHours: 96,
   })));
   app.register(async routes => {
@@ -46,7 +47,7 @@ export function registerTradingRoutes(app: FastifyInstance, db: PrismaClient, li
     });
     registerLiveOrderRoutes(routes, db, liveConfig);
     routes.get("/api/v1/agent/context", async () => ({
-      mode: "SIMULATION", policy,
+      mode: "SIMULATION", policy: { ...policy, allowedSymbols: await listEligibleTradingSymbols(db) },
       analyses: await db.analysis.findMany({ orderBy: { timestamp: "desc" }, take: 100,
         include: { instrument: { select: { symbol: true, kind: true } } } }),
     }));
@@ -79,9 +80,9 @@ export function registerTradingRoutes(app: FastifyInstance, db: PrismaClient, li
               if (existing.requestHash !== requestHash) throw error("Idempotency key already used with different request", 409);
               return { proposal: existing, created: false };
             }
-            const tradingInstrument = await tx.instrument.findUnique({ where: { symbol: input.symbol } });
-            if (!tradingInstrument || !["EQUITY", "ETF"].includes(tradingInstrument.kind)) {
-              throw error("Trading symbol must be a configured EQUITY or ETF instrument", 422);
+            const tradingInstrument = await tx.instrument.findUnique({ where: { symbol: input.symbol, ...eligibleTradingInstrument } });
+            if (!tradingInstrument) {
+              throw error("Trading symbol must be an active registered EQUITY or ETF instrument", 422);
             }
             const analysis = await tx.analysis.findUnique({ where: { id: input.analysisId }, include: { instrument: true } });
             if (!analysis) throw error("Analysis not found", 404);
