@@ -28,7 +28,9 @@ export function rebalance(cashValue: string, rawPositions: unknown, quotes: Reco
   const equity = Object.entries(positions).reduce((sum, [s, p]) => p.quantity ? sum.plus(mid(s).mul(p.quantity)) : sum, cash);
   const fills: Array<{ symbol: string; side: "BUY" | "SELL"; quantity: number; price: string; fee: string }> = [];
   const fee = new D(config.feePerOrder);
-  const targets = decision.action === "HOLD" ? [] : decision.targets.map(t => ({ ...t, desired: equity.mul(t.weight).div(mid(t.symbol)).floor().toNumber() }));
+  const targets = decision.targets
+    .filter(target => !config.blockedSymbols?.includes(target.symbol))
+    .map(target => ({ ...target, desired: equity.mul(target.weight).div(mid(target.symbol)).floor().toNumber() }));
   // Sells release cash before buys. Conservative bid/ask pricing includes adverse slippage.
   for (const side of ["SELL", "BUY"] as const) for (const target of targets) {
     const position = positions[target.symbol] ?? { quantity: 0, costBasis: "0" };

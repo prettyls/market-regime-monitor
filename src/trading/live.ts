@@ -13,7 +13,7 @@ export function registerLiveOrderRoutes(routes: FastifyInstance, db: PrismaClien
     enabled: true,
     maxOrderDollars: config.maxOrderDollars,
     maxDailyDollars: config.maxDailyDollars,
-    allowedSymbols: await listEligibleTradingSymbols(db),
+    allowedSymbols: await listEligibleTradingSymbols(db, config.blockedSymbols),
   } : { enabled: false });
   routes.post("/api/v1/agent/live-orders", async (request, reply) => {
     if (!config) return reply.code(403).send({ error: "Agent live trading is disabled" });
@@ -33,6 +33,9 @@ export function registerLiveOrderRoutes(routes: FastifyInstance, db: PrismaClien
         const { requestHash: savedHash, ...order } = existing;
         if (savedHash !== requestHash) return { code: 409, error: "Idempotency key already used" } as const;
         return { order, created: false } as const;
+      }
+      if (config.blockedSymbols?.includes(input.symbol)) {
+        return { code: 422, error: "Trading symbol is blocked by policy" } as const;
       }
       if (notional.gt(config.maxOrderDollars)) {
         return { code: 422, error: "Order exceeds the live per-order limit" } as const;

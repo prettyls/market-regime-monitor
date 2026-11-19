@@ -1,9 +1,12 @@
 import { z } from "zod";
+import { blockedSymbolsSchema } from "../trading/policy.js";
+
 export const paperConfigSchema = z.object({
   enabled: z.boolean().default(false),
   accountId: z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/).default("paper-primary"),
   strategy: z.string().min(1).max(64).default("regime-allocation-v1"),
   symbols: z.array(z.string().regex(/^[A-Z][A-Z0-9.-]{0,14}$/)).min(1).max(20).refine(a => new Set(a).size === a.length),
+  blockedSymbols: blockedSymbolsSchema,
   benchmark: z.string().regex(/^[A-Z][A-Z0-9.-]{0,14}$/).default("SPY"),
   initialCash: z.number().positive().max(10000000).default(10000),
   maxPositionWeight: z.number().positive().max(1).default(0.2),

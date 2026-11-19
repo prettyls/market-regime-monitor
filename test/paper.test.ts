@@ -38,6 +38,24 @@ describe("paper portfolio", () => {
     expect(() => validateDecision({ action: "HOLD", reason: "x", targets: decision.targets }, config)).toThrow();
     expect(() => rebalance("-1", {}, quotes, decision, config)).toThrow();
   });
+  it("treats empty and omitted blocklists as the same policy", () => {
+    const empty = paperConfigSchema.parse({ ...config, blockedSymbols: [] });
+    expect(JSON.stringify(empty)).toBe(JSON.stringify(config));
+    expect(rebalance("10000", {}, quotes, decision, empty).fills).toHaveLength(1);
+  });
+  it("skips blocked buys and sells while executing other targets", () => {
+    const cfg = paperConfigSchema.parse({ ...config, symbols: ["SPY", "QQQ"], blockedSymbols: ["spy"] });
+    const targets = [...decision.targets, { symbol: "QQQ", weight: 0.2 }];
+    const buy = rebalance("10000", {}, { ...quotes, QQQ: quotes.SPY }, { ...decision, targets }, cfg);
+    expect(buy.fills.map(fill => fill.symbol)).toEqual(["QQQ"]);
+
+    const positions = { SPY: { quantity: 5, costBasis: "400" } };
+    const exit = rebalance("0", positions, { ...quotes, QQQ: quotes.SPY }, {
+      ...decision, targets: targets.map(target => ({ ...target, weight: 0 })),
+    }, cfg);
+    expect(exit.fills).toEqual([]);
+    expect(exit.positions).toEqual(positions);
+  });
   it("caps shared turnover across several symbols", () => {
     const cfg = { ...config, symbols: ["SPY", "QQQ"], maxDailyDollars: 1100 };
     const result = rebalance("10000", {}, { ...quotes, QQQ: quotes.SPY }, { ...decision, targets: [{ symbol: "SPY", weight: 0.2 }, { symbol: "QQQ", weight: 0.2 }] }, cfg);

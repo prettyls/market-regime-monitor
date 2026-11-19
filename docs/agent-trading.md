@@ -104,7 +104,7 @@ migration and restart all API instances. Local `.env` applies to the local API.
 Set the variables on the deployment when MCP connects to a remote API.
 
 The live endpoint accepts whole-share BUY and SELL LIMIT DAY orders for Schwab's
-normal trading session. It uses the configured account. Live orders and standalone simulated proposals both target active equities and ETFs in the instrument registry. Any legacy `allowedSymbols` in `TRADING_POLICY_JSON` is ignored. The daily
+normal trading session. It uses the configured account. Live orders and standalone simulated proposals both target active equities and ETFs in the instrument registry. Set optional `"blockedSymbols":["AAPL"]` in `TRADING_POLICY_JSON` for standalone simulated proposals or in `AGENT_LIVE_TRADING_JSON` for live orders. The API excludes blocked symbols from the corresponding `allowedSymbols` response and rejects new orders for those symbols, including live sells. Symbol matching is case-insensitive. Omit the key or set it to `[]` to allow all otherwise eligible symbols. The daily
 budget counts the combined notional of submitted and unresolved buys and sells
 and resets at midnight UTC.
 Other account activity is outside that budget. Schwab determines eligibility,

@@ -80,6 +80,25 @@ describe("trading boundary", () => {
     if (allowed) expect(response.json().snapshot.tradingInstrument.kind).toBe(kind);
     await app.close();
   });
+  it("filters blocked targets from context and rejects new proposals", async () => {
+    vi.stubEnv("AGENT_CREDENTIALS_JSON", JSON.stringify([{ role: "admin", id: "agent", token: "x".repeat(32), scopes: ["analysis:read", "trades:propose"] }]));
+    vi.stubEnv("TRADING_POLICY_JSON", JSON.stringify({ ...policy, blockedSymbols: ["sPy"] }));
+    const app = Fastify();
+    const tx = { $executeRaw: vi.fn(), tradeProposal: { findUnique: async () => null } };
+    registerTradingRoutes(app, {
+      instrument: { findMany: async () => [{ symbol: "QQQ" }, { symbol: "SPY" }] },
+      analysis: { findMany: async () => [] },
+      $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx),
+    } as unknown as PrismaClient);
+    try {
+      const headers = { authorization: `Bearer ${"x".repeat(32)}` };
+      const context = await app.inject({ url: "/api/v1/agent/context", headers });
+      expect(context.json().policy.allowedSymbols).toEqual(["QQQ"]);
+      const response = await app.inject({ method: "POST", url: "/api/v1/trade-proposals", headers, payload: input });
+      expect(response.statusCode).toBe(422);
+      expect(response.json().message).toMatch(/blocked by policy/);
+    } finally { await app.close(); }
+  });
   it("blocks proposals when the shared daily budget is exhausted", async () => {
     vi.stubEnv("AGENT_CREDENTIALS_JSON", JSON.stringify([{ role: "admin", id: "agent", token: "x".repeat(32), scopes: ["trades:propose"] }]));
     vi.stubEnv("TRADING_POLICY_JSON", JSON.stringify(policy));

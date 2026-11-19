@@ -67,7 +67,7 @@ export function registerTradingRoutes(app: FastifyInstance, db: PrismaClient, li
       return { provider: "charles_schwab", symbol: symbol.toUpperCase(), interval, bars };
     });
     routes.get("/api/v1/agent/context", async () => ({
-      mode: "SIMULATION", policy: { ...policy, allowedSymbols: await listEligibleTradingSymbols(db) },
+      mode: "SIMULATION", policy: { ...policy, allowedSymbols: await listEligibleTradingSymbols(db, policy.blockedSymbols) },
       analyses: await db.analysis.findMany({ orderBy: { timestamp: "desc" }, take: 100,
         include: { instrument: { select: { symbol: true, kind: true } } } }),
     }));
@@ -100,6 +100,7 @@ export function registerTradingRoutes(app: FastifyInstance, db: PrismaClient, li
               if (existing.requestHash !== requestHash) throw error("Idempotency key already used with different request", 409);
               return { proposal: existing, created: false };
             }
+            if (policy.blockedSymbols?.includes(input.symbol)) throw error("Trading symbol is blocked by policy", 422);
             const tradingInstrument = await tx.instrument.findUnique({ where: { symbol: input.symbol, ...eligibleTradingInstrument } });
             if (!tradingInstrument) {
               throw error("Trading symbol must be an active registered EQUITY or ETF instrument", 422);
