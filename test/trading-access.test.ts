@@ -56,6 +56,7 @@ it.each([
   vi.stubEnv("SCHWAB_TRADE_ACCOUNT_HASH", "test-account");
   vi.stubEnv("AGENT_LIVE_TRADING_JSON", JSON.stringify({
     maxOrderDollars: 200, maxDailyDollars: 400,
+    blockedSymbols: [side === "BUY" ? "spy" : "aapl"],
     ...(side === "SELL" ? { allowedSymbols: ["AAPL"], accountHash: "obsolete-account" } : {}),
   }));
   vi.stubEnv("SCHWAB_TRADE_TOKEN_STORE", "env");
@@ -102,13 +103,16 @@ it.each([
     const headers = { authorization: `Bearer ${token}` };
     const permission = await app.inject({ url: "/api/v1/agent/live-orders/permission", headers });
     expect(permission.json().enabled).toBe(enabled === "true");
-    if (enabled === "true") expect(permission.json().allowedSymbols).toEqual(["AAPL", "SPY"]);
+    if (enabled === "true") expect(permission.json().allowedSymbols).toEqual([side === "BUY" ? "AAPL" : "SPY"]);
     const payload = {
       symbol: side === "BUY" ? "AAPL" : "SPY", side, quantity: 1, orderType: "LIMIT", limitPrice: "100.00",
       timeInForce: "DAY", reason: "Test mock order", idempotencyKey: "live-test-key",
     };
     const request = { method: "POST" as const, url: "/api/v1/agent/live-orders", headers, payload };
     if (enabled === "true") {
+      const blocked = await app.inject({ ...request, payload: { ...payload, symbol: side === "BUY" ? "spy" : "aapl" } });
+      expect(blocked.statusCode).toBe(422);
+      expect(blocked.json().error).toMatch(/blocked by policy/);
       for (const symbol of ["VIX", "INACTIVE", "UNREGISTERED"]) {
         const denied = await app.inject({ ...request, payload: { ...payload, symbol } });
         expect(denied.statusCode).toBe(422);

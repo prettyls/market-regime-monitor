@@ -1,9 +1,12 @@
 import { z } from "zod";
 
+const tradingSymbolSchema = z.string().regex(/^[A-Za-z][A-Za-z0-9.\-]{0,14}$/).transform(s => s.toUpperCase());
+export const blockedSymbolsSchema = z.array(tradingSymbolSchema).transform(symbols => symbols.length ? symbols : undefined).optional();
+
 export const proposalSchema = z.object({
   analysisId: z.string().min(1),
   strategyId: z.string().min(1).max(100),
-  symbol: z.string().regex(/^[A-Za-z][A-Za-z0-9.\-]{0,14}$/).transform(s => s.toUpperCase()),
+  symbol: tradingSymbolSchema,
   side: z.literal("BUY"),
   quantity: z.number().int().positive().max(1000000),
   orderType: z.literal("LIMIT"),
@@ -18,6 +21,7 @@ export const policySchema = z.object({
   enabled: z.boolean().default(false),
   maxOrderDollars: z.number().positive().max(1000000),
   maxDailyDollars: z.number().positive().max(1000000),
+  blockedSymbols: blockedSymbolsSchema,
   maxAnalysisAgeHours: z.number().positive().max(168),
 }).strict();
 // Accept legacy environment settings while deriving eligible symbols from the registry.
@@ -46,7 +50,7 @@ export const liveOrderSchema = proposalSchema
 export type LiveOrderInput = z.infer<typeof liveOrderSchema>;
 
 export const liveOrderConfigSchema = policySchema
-  .pick({ maxOrderDollars: true, maxDailyDollars: true })
+  .pick({ maxOrderDollars: true, maxDailyDollars: true, blockedSymbols: true })
   .extend({
     // Ignore retired fields in existing deployments.
     accountHash: z.unknown().optional(),

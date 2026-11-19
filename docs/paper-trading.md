@@ -92,6 +92,8 @@ Changing initial cash or benchmark requires a new account ID. Keep held symbols
 in policy until positions are exited. Run one experiment per account; do not
 switch configuration between jobs.
 
+Set optional `"blockedSymbols":["AAPL"]` in `PAPER_TRADING_JSON` to skip both simulated buys and sells for those symbols. Matching is case-insensitive. Omit the key or set it to `[]` to allow all otherwise eligible symbols. Keep blocked holdings in `symbols` so the portfolio can still value them.
+
 `PAPER_TRADING_JSON` is the policy for this separate ledger. The existing
 `TRADING_POLICY_JSON` applies to standalone simulated proposals and does not
 pause the scheduled paper workflow. Set paper `enabled:false` consistently on
