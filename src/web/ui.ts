@@ -33,6 +33,8 @@ ${baseStyles}
   table { width: 100%; border-collapse: collapse; font-size: 14px; }
   th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--border); }
   th { color: var(--muted); font-weight: 500; }
+  .sort-column { display: inline-flex; gap: 6px; align-items: center; padding: 0; border: 0; border-radius: 0; background: transparent; color: inherit; text-align: left; }
+  .sort-column:hover { text-decoration: underline; }
   ul { margin: 0; padding-left: 20px; }
   .bullish { color: var(--normal); }
   .bearish { color: var(--alert); }
@@ -175,10 +177,14 @@ ${baseStyles}
 
   if (${admin}) { setInterval(paintTokenBar, 1000); setInterval(refreshTokenStatus, 30000); }
 
+  function tableRow(cells) {
+    return el("tr", {}, cells.map(function (cell) { return el("td", {}, [cell]); }));
+  }
+
   function table(headers, rows) {
     return el("table", {}, [
       el("thead", {}, [el("tr", {}, headers.map(function (h) { return el("th", {}, [term(h)]); }))]),
-      el("tbody", {}, rows.map(function (cells) { return el("tr", {}, cells.map(function (c) { return el("td", {}, [c]); })); }))
+      el("tbody", {}, rows.map(tableRow))
     ]);
   }
 
@@ -251,17 +257,71 @@ ${baseStyles}
   $("latest").onclick = function () { location.href = "/analysis?symbol=" + symbol(); };
   }
 
+  function instrumentRow(i) {
+    var a = i.analysis;
+    return [el("a", { href: "/analysis?symbol=" + encodeURIComponent(i.symbol), textContent: i.symbol + " - " + i.name }), a ? term(a.status) : "Not analyzed", a ? term(a.regime) : "-", a ? fmt(a.score) : "-", a ? fmt(a.confidence) + "%" : "-", a ? date(a.timestamp) : "-"];
+  }
+
+  function instrumentTable(members) {
+    var columns = [
+      { label: "Instrument", value: function (i) { return i.symbol; }, direction: 1 },
+      { label: "Status", field: "status", value: function (a) { return ["NORMAL", "WARNING", "ALERT"].indexOf(a.status); }, direction: -1 },
+      { label: "Regime", field: "regime", direction: 1 },
+      { label: "Score", field: "score", direction: -1 },
+      { label: "Signal strength", field: "confidence", direction: -1 }
+    ];
+    var active = columns[0];
+    var direction = active.direction;
+    var body = el("tbody");
+    var headers = columns.map(function (column) {
+      var indicator = el("span");
+      indicator.setAttribute("aria-hidden", "true");
+      var button = el("button", { type: "button", className: "sort-column", title: glossary[column.label.toLowerCase()] || "" }, [column.label, indicator]);
+      var header = el("th", { scope: "col" }, [button]);
+      button.onclick = function () {
+        direction = active === column ? -direction : column.direction;
+        active = column;
+        updateSort();
+      };
+      return { header: header, indicator: indicator };
+    });
+
+    function sortValue(i) {
+      if (!active.field) return active.value(i);
+      if (!i.analysis) return null;
+      return active.value ? active.value(i.analysis) : i.analysis[active.field];
+    }
+
+    function updateSort() {
+      headers.forEach(function (entry, index) {
+        var selected = columns[index] === active;
+        if (selected) entry.header.setAttribute("aria-sort", direction === 1 ? "ascending" : "descending");
+        else entry.header.removeAttribute("aria-sort");
+        entry.indicator.textContent = selected ? (direction === 1 ? "↑" : "↓") : "↕";
+      });
+      members.sort(function (left, right) {
+        var a = sortValue(left), b = sortValue(right);
+        if (a == null && b != null) return 1;
+        if (a != null && b == null) return -1;
+        var comparison = a == null ? 0 : typeof a === "number" ? a - b : a.localeCompare(b);
+        return direction * comparison || left.symbol.localeCompare(right.symbol);
+      });
+      body.replaceChildren.apply(body, members.map(instrumentRow).map(tableRow));
+    }
+
+    updateSort();
+    var headings = headers.map(function (entry) { return entry.header; });
+    headings.push(el("th", { scope: "col", textContent: "As of" }));
+    return el("table", {}, [el("thead", {}, [el("tr", {}, headings)]), body]);
+  }
+
   async function loadResults() {
     var instruments = await api("GET", "/api/v1/analyses/latest");
     var kinds = [["INDEX", "Indices"], ["ETF", "ETFs"], ["EQUITY", "Equities"], ["RATE", "Rates"], ["COMMODITY", "Commodities"], ["OTHER", "Other"]];
     var panels = kinds.map(function (kind) {
-    var members = instruments.filter(function (i) { return i.kind === kind[0]; });
-    var rows = members.map(function (i) {
-      var a = i.analysis;
-      return [el("a", { href: "/analysis?symbol=" + encodeURIComponent(i.symbol), textContent: i.symbol + " - " + i.name }), a ? term(a.status) : "Not analyzed", a ? term(a.regime) : "-", a ? fmt(a.score) : "-", a ? fmt(a.confidence) + "%" : "-", a ? date(a.timestamp) : "-"];
-    });
-    var content = el("div", { className: "table-scroll" }, rows.length ? [table(["Instrument", "Status", "Regime", "Score", "Signal strength", "As of"], rows)] : []);
-    return el("details", { className: "kind-panel", open: true }, [el("summary", { textContent: kind[1] + " (" + members.length + ")" }), content]);
+      var members = instruments.filter(function (i) { return i.kind === kind[0]; });
+      var content = el("div", { className: "table-scroll" }, members.length ? [instrumentTable(members)] : []);
+      return el("details", { className: "kind-panel", open: true }, [el("summary", { textContent: kind[1] + " (" + members.length + ")" }), content]);
     });
     $("results").replaceChildren.apply($("results"), panels);
   }
