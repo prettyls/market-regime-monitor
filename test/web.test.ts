@@ -37,12 +37,15 @@ describe("landing page flow", () => {
 
   it("loads all latest results and navigates after a successful analysis", async () => {
     const nodes = new Map<string, any>();
-    const node = () => ({ value: "SPY", children: [] as any[], style: {}, setAttribute(key: string, value: string) { (this as any)[key] = value; }, append(child: any) { this.children.push(child); }, replaceChildren(...children: any[]) { this.children = children; } });
+    const node = () => ({ value: "SPY", children: [] as any[], style: {}, setAttribute(key: string, value: string) { (this as any)[key] = value; }, removeAttribute(key: string) { delete (this as any)[key]; }, append(child: any) { this.children.push(child); }, replaceChildren(...children: any[]) { this.children = children; } });
     for (const id of ["import", "analyze", "latest", "message", "symbol", "results", "token-bar", "token-fill", "token-label", "from", "to"]) nodes.set(id, node());
     const location = { search: "", href: "" };
     const fetch = vi.fn(async (path: string) => ({ ok: true, status: 200, json: async () => {
       if (path === "/api/v1/instruments") return [{ symbol: "SPY", name: "S&P 500" }];
-      if (path === "/api/v1/analyses/latest") return [{ symbol: "NVDA", name: "NVIDIA", kind: "EQUITY", analysis: null }, { symbol: "SPY", name: "S&P 500", kind: "ETF", analysis: { status: "NORMAL", regime: "MEAN_REVERSION", score: 12, confidence: 65, timestamp: "2026-11-12" } }];
+      if (path === "/api/v1/analyses/latest") return [{ symbol: "NVDA", name: "NVIDIA", kind: "EQUITY", analysis: null }, { symbol: "SPY", name: "S&P 500", kind: "ETF", analysis: { status: "NORMAL", regime: "MEAN_REVERSION", score: 12, confidence: 65, timestamp: "2026-11-12" } },
+        { symbol: "QQQ", name: "Nasdaq 100", kind: "ETF", analysis: null },
+        { symbol: "DIA", name: "Dow Jones", kind: "ETF", analysis: { status: "ALERT", regime: "BREAKOUT_DOWN", score: -80, confidence: 92, timestamp: "2026-11-12" } },
+      ];
       return {};
     } }));
     runInNewContext(uiHtml.match(/<script>([\s\S]*?)<\/script>/)![1]!, {
@@ -53,7 +56,7 @@ describe("landing page flow", () => {
     await vi.waitFor(() => expect(nodes.get("results").children).toHaveLength(6));
     const panels = nodes.get("results").children;
     expect(panels.map((panel: any) => panel.children[0].textContent)).toEqual([
-      "Indices (0)", "ETFs (1)", "Equities (1)", "Rates (0)", "Commodities (0)", "Other (0)"
+      "Indices (0)", "ETFs (3)", "Equities (1)", "Rates (0)", "Commodities (0)", "Other (0)"
     ]);
     expect(panels.every((panel: any) => panel.open === true)).toBe(true);
     expect(panels[0].children[1].children).toHaveLength(0);
@@ -61,11 +64,32 @@ describe("landing page flow", () => {
     expect(equityRow.children[0].children[0].textContent).toBe("NVDA - NVIDIA");
     expect(equityRow.children[1].children[0]).toBe("Not analyzed");
     const table = panels[1].children[1].children[0];
-    const regime = table.children[1].children[0].children[2].children[0];
+    const regime = table.children[1].children[2].children[2].children[0];
     expect(regime.textContent).toBe("MEAN_REVERSION");
     expect(regime.title).toContain("recent average");
     expect(regime.tabIndex).toBe(0);
     expect(regime["aria-label"]).toContain(regime.title);
+    const headings = table.children[0].children[0].children;
+    const symbols = () => table.children[1].children.map((row: any) => row.children[0].children[0].textContent.split(" - ")[0]);
+    expect(symbols()).toEqual(["DIA", "QQQ", "SPY"]);
+    expect(headings[0]["aria-sort"]).toBe("ascending");
+    headings[0].children[0].onclick();
+    expect(symbols()).toEqual(["SPY", "QQQ", "DIA"]);
+
+    for (const [column, order, first, second] of [
+      [1, "descending", "DIA", "SPY"],
+      [2, "ascending", "DIA", "SPY"],
+      [3, "descending", "SPY", "DIA"],
+      [4, "descending", "DIA", "SPY"],
+    ] as const) {
+      const heading = headings[column];
+      heading.children[0].onclick();
+      expect(symbols()).toEqual([first, second, "QQQ"]);
+      expect(heading["aria-sort"]).toBe(order);
+      expect(headings.filter((entry: any) => entry["aria-sort"])).toEqual([heading]);
+      heading.children[0].onclick();
+      expect(symbols()).toEqual([second, first, "QQQ"]);
+    }
     nodes.get("analyze").onclick();
     await vi.waitFor(() => expect(location.href).toBe("/analysis?symbol=SPY"));
     expect(fetch).toHaveBeenCalledWith("/api/v1/instruments/SPY/analyze", { method: "POST" });
