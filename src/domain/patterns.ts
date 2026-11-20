@@ -53,16 +53,33 @@ export class MeanReversionDetector implements PatternDetector {
 export class TrendDetector implements PatternDetector {
   readonly name = "trend";
   detect(bars: readonly Bar[], config: PatternConfig): PatternSignal {
-    const { fastPeriod, slowPeriod, slopePeriod } = config.trend;
-    if (bars.length < Math.max(slowPeriod, slopePeriod)) return insufficient(this.name);
+    const { fastPeriod, slowPeriod, slopePeriod, atrPeriod = 14, minGapAtr = 0.5, minSlopeAtr = 0.1 } = config.trend;
+    if (bars.length < Math.max(slowPeriod, slopePeriod, atrPeriod + 1)) return insufficient(this.name);
     const closes = bars.map((bar) => bar.close);
     const fast = sma(closes, fastPeriod)!;
     const slow = sma(closes, slowPeriod)!;
     const slope = linearSlope(closes.slice(-slopePeriod));
-    const up = fast > slow && slope > 0;
-    const down = fast < slow && slope < 0;
-    const strength = Math.abs((fast - slow) / slow) * 100;
-    return { pattern: this.name, state: up ? "UP" : down ? "DOWN" : "FLAT", score: up ? clamp(50 + strength * 20) : down ? -clamp(50 + strength * 20) : 0, confidence: up || down ? clamp(55 + strength * 15) : 40, evidence: up || down ? [{ code: "MA_TREND", message: `Fast average is ${up ? "above" : "below"} slow average with confirming slope`, value: fast, threshold: slow, direction: up ? "bullish" : "bearish", weight: 1 }] : [], metrics: { fast, slow, slope } };
+    const volatility = atr(bars, atrPeriod)!;
+    const gapAtr = volatility > 0 ? (fast - slow) / volatility : 0;
+    const slopeAtr = volatility > 0 ? slope / volatility : 0;
+    const up = gapAtr > 0 && slopeAtr > 0 && gapAtr >= minGapAtr && slopeAtr >= minSlopeAtr;
+    const down = gapAtr < 0 && slopeAtr < 0 && -gapAtr >= minGapAtr && -slopeAtr >= minSlopeAtr;
+    const strength = slow === 0 ? 0 : Math.abs((fast - slow) / slow) * 100;
+    return {
+      pattern: this.name,
+      state: up ? "UP" : down ? "DOWN" : "FLAT",
+      score: up ? clamp(50 + strength * 20) : down ? -clamp(50 + strength * 20) : 0,
+      confidence: up || down ? clamp(55 + strength * 15) : 40,
+      evidence: up || down ? [{
+        code: "MA_TREND",
+        message: `Moving-average gap ${gapAtr.toFixed(2)} ATR and slope ${slopeAtr.toFixed(2)} ATR per bar agree and meet their thresholds.`,
+        value: gapAtr,
+        threshold: up ? minGapAtr : -minGapAtr,
+        direction: up ? "bullish" : "bearish",
+        weight: 1
+      }] : [],
+      metrics: { fast, slow, slope, atr: volatility, gapAtr, slopeAtr, minGapAtr, minSlopeAtr }
+    };
   }
 }
 

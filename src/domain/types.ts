@@ -34,7 +34,7 @@ export type PatternConfig = Readonly<{
   range: { lookback: number; percentileLow: number; percentileHigh: number };
   breakout: { lookback: number; confirmationBars: number; bufferPct: number; atrPeriod?: number | undefined; atrMultiplier?: number | undefined };
   meanReversion: { lookback: number; zScoreEntry: number };
-  trend: { fastPeriod: number; slowPeriod: number; slopePeriod: number };
+  trend: { fastPeriod: number; slowPeriod: number; slopePeriod: number; atrPeriod?: number | undefined; minGapAtr?: number | undefined; minSlopeAtr?: number | undefined };
 }>;
 
 export type InstrumentDefinition = Readonly<{

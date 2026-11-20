@@ -179,7 +179,7 @@ Example instrument body:
     "range": { "lookback": 60, "percentileLow": 0.2, "percentileHigh": 0.8 },
     "breakout": { "lookback": 20, "confirmationBars": 2, "bufferPct": 0.005 },
     "meanReversion": { "lookback": 30, "zScoreEntry": 2 },
-    "trend": { "fastPeriod": 10, "slowPeriod": 30, "slopePeriod": 10 }
+    "trend": { "fastPeriod": 10, "slowPeriod": 30, "slopePeriod": 10, "atrPeriod": 14, "minGapAtr": 0.5, "minSlopeAtr": 0.1 }
   }
 }
 ```
@@ -243,6 +243,8 @@ Analysis now uses the selected regime's directional score (−100 to +100), rath
 Equities and ETFs use historical volume automatically. Latest-session volume and average volume across the breakout confirmation window are compared with the mean of the preceding 20 sessions, excluding the entire confirmation window. Confirmation ratios below 0.8× reduce directional signal strength by 10 points; ratios at or above 1.5× increase it by 10 points, bounded to 0–100. Missing, nonfinite, nonpositive, or insufficient volume leaves price analysis usable without an adjustment. Other instrument kinds, including spot VIX, display volume as not applicable; no proxy volume is silently substituted.
 
 Breakouts use the larger of the percentage buffer and 0.5 × Wilder ATR(14). ATR uses only bars preceding the confirmation window, including overnight gaps. If ATR history is insufficient, the percentage buffer remains active. Set `breakout.atrMultiplier` to zero to disable ATR buffering. Optional `volume` settings are `enabled`, `lookback`, `lowRatio`, and `highRatio`; existing configurations use the defaults described above.
+
+Trend detection requires the fast/slow moving-average gap and fitted price slope to agree in direction. By default, the minimum gap is 0.5 × Wilder ATR(14), and the minimum slope per bar is 0.1 × ATR. Existing instrument configurations inherit these defaults. Both thresholds can be overridden per instrument.
 
 To avoid partial daily candles, live analysis and backtesting exclude the current UTC calendar date. This conservative policy also defers same-day post-close analysis until the next UTC date; provider session-completion metadata is not available. Historical bars should have consistent corporate-action adjustments for both price and volume.
 

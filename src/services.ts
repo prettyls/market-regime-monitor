@@ -115,7 +115,7 @@ export class MarketService {
     const rows = await this.db.marketBar.findMany({ where: { instrumentId: instrument.id, interval: "1d", timestamp: { lt: new Date(new Date().toISOString().slice(0, 10)) } }, orderBy: { timestamp: "asc" } });
     const bars = rows.map((row) => ({ timestamp: row.timestamp, open: row.open, high: row.high, low: row.low, close: row.close, ...(row.volume === null ? {} : { volume: row.volume }) }));
     const config = this.analysisConfig(instrument);
-    const minBars = Math.max(config.range.lookback, config.breakout.lookback + config.breakout.confirmationBars, config.meanReversion.lookback, config.trend.slowPeriod, config.trend.slopePeriod);
+    const minBars = Math.max(config.range.lookback, config.breakout.lookback + config.breakout.confirmationBars, config.meanReversion.lookback, config.trend.slowPeriod, config.trend.slopePeriod, (config.trend.atrPeriod ?? 14) + 1);
     const observations = [];
     for (let i = minBars; i < bars.length - 1; i++) {
       const analysis = this.strategy.analyze(bars.slice(0, i + 1), config);
