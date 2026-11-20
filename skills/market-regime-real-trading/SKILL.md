@@ -6,8 +6,10 @@ description: Review a real Schwab account's balances, positions, exposure and re
 Use the configured `market-regime-monitor` MCP connection. Read actual positions
 and balances with `get_portfolio({})` and actual broker order records with
 `get_recent_orders({})` as needed. The order history covers the trailing seven
-days. For market-regime evidence, use `get_trading_context({})` when available
-and identify the analysis symbol and session date.
+days. For market-regime evidence, use `get_trading_context` when available.
+When the source symbol is known, pass it as `{"symbol":"VIX"}` to get its
+latest saved analysis. Omit the filter when you need to discover analyses
+across symbols. Identify the analysis symbol and session date.
 
 Use `get_schwab_bars` for market candles at the requested interval. For
 five-minute candles, pass `interval: "5m"`. If Schwab is unavailable or returns
