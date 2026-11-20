@@ -34,6 +34,16 @@ it("uses Eastern dates and excludes pending transactions", () => {
   const result = estimateCalendar([trade(1, "2026-11-02", 1, -100, { time: "2026-11-03T01:00:00Z" }), trade(2, "2026-11-03", -1, 120, { status: "PENDING" })], "2026-11", "2026-01-01", "now");
   expect(result.days).toEqual([{ date: "2026-11-02", realizedPnl: "0.0000", closingTrades: 0 }]);
 });
+it("estimates Schwab trades with compact offsets and no activity type", () => {
+  const rows = [
+    trade(1, "2026-11-02", 1, -100, { time: "2026-11-02T15:00:00+0000", activityType: undefined }),
+    trade(2, "2026-11-03", -1, 115, {
+      time: "2026-11-03T15:00:00+0000", tradeDate: "2026-11-03T00:00:00+0000", activityType: undefined,
+    }),
+  ];
+  const result = estimateCalendar(rows, "2026-11", "2026-01-01", "now");
+  expect(result.days[1]).toMatchObject({ date: "2026-11-03", realizedPnl: "15.0000" });
+});
 it("refuses ambiguous accounts before fetching transactions", async () => {
   read.mockResolvedValue([{ hashValue: "one" }, { hashValue: "two" }]);
   await expect(syncCalendar({} as PrismaClient)).rejects.toMatchObject({ code: "SCHWAB_ACCOUNT_SELECTION_REQUIRED" });

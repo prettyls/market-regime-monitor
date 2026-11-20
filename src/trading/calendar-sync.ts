@@ -37,7 +37,15 @@ export async function syncCalendar(db: PrismaClient, configured?: string, now = 
       throw new SchwabPortfolioError(error.code, `${type} transactions: ${error.message}`, error.statusCode, error.upstreamStatus);
     }
     const result = transactionSchema.safeParse(response);
-    if (!result.success) throw new SchwabPortfolioError("SCHWAB_INVALID_RESPONSE", "Schwab returned unsupported transaction data");
+    if (!result.success) {
+      const fields = new Set(result.error.issues.map(issue => issue.path
+        .map(segment => typeof segment === "number" ? "[]" : String(segment))
+        .join(".")));
+      throw new SchwabPortfolioError(
+        "SCHWAB_INVALID_RESPONSE",
+        `${type} transactions: Schwab returned unsupported transaction data at ${[...fields].slice(0, 10).join(", ") || "response root"}`,
+      );
+    }
     return result.data;
   }));
   const transactions = new Map(results.flat().map(transaction => [String(transaction.activityId), transaction]));
