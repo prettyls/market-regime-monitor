@@ -54,6 +54,13 @@ indices from trade proposals and allocation targets. An ETF that tracks an
 index is eligible on its own merits. Treat SPY as an example and possible
 benchmark, with the same eligibility checks as any other ETF.
 
+Screen targets before fetching symbol-specific market evidence or analyzing
+them for trades. For scheduled allocations, use the paper portfolio policy's
+configured symbols and `blockedSymbols`. For standalone proposals, use
+`get_trading_context` policy's `allowedSymbols`. Skip blocked targets for
+entries, exits and trade monitoring. Keep their holdings and fills in portfolio
+valuation, P&L and applicable committed-capital totals.
+
 Keep the selected paper account's configured initial cash as its baseline.
 The paper trading allowance is the greater of that baseline and the baseline
 plus cumulative net realized P&L from the account's simulated fills, including
@@ -63,6 +70,13 @@ Subtract the cost basis of open paper positions when sizing new buys, and apply
 the account's cash, reserve, position and turnover limits. If the account's
 realized P&L through the latest fill cannot be verified, report the gap and
 defer new buys.
+
+For each proposed entry, record the thesis, its invalidation condition, and
+the dollar risk budget from the applicable rules or user limits. Size within
+both available capital and estimated loss per share, including modeled
+slippage and fees where available. If the risk budget or a usable estimate
+of exit risk is missing, report the gap before proposing a size. Plan how to
+monitor the exit and account for overnight gap risk under the no-T+0 rule.
 
 Apply the returned rules and server limits. Increase a paper allocation only
 when the target instrument's regime, signed score and heuristic confidence meet
@@ -102,6 +116,11 @@ actions honestly instead of using another interface to bypass the boundary.
 When reviewing performance, distinguish simulated fills from actual orders and
 since-inception returns from daily or annualized returns. Include available fees,
 slippage assumptions, benchmark period and omitted dividends/corporate actions.
+Use the scheduled paper ledger to reconcile matched fills and open cost basis.
+Report realized P&L from matched fills and unrealized P&L at the report mark
+separately. Identify the mark's session and label realized figures before fees
+when fees are unavailable. Keep standalone proposals out of realized P&L and
+committed capital because they create no ledger fills.
 A profitable short test is not evidence of dependable income.
 
 ## Performance feedback and revisions
@@ -110,6 +129,9 @@ After a confirmed position close, review that trade against the rules and skill
 version used for entry and exit, and provide evidence-based feedback using
 [references/revisions.md](references/revisions.md#post-close-trade-review).
 A closing performance report alone does not confirm a position was closed.
+Record the exit reason, compare realized P&L with planned risk, and review
+simulated execution against the applicable pricing assumptions. Use a series
+of comparable closed trades to assess signal changes.
 
 Use the `reviews` returned by `get_paper_portfolio` when asked to diagnose losses
 or missed expectations. Read [references/revisions.md](references/revisions.md).

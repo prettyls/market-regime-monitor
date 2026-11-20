@@ -37,8 +37,13 @@ Use applicable account restrictions from verified broker data or user-provided
 account rules.
 
 For trade preparation, consider equities and ETFs across tickers and use
-indices only as context or benchmarks. Verify the exact instrument and its
-broker eligibility. Check the freshness of market evidence and the availability
+indices only as context or benchmarks. Use the live permission response's
+`allowedSymbols` to screen equities and ETFs before fetching symbol-specific
+market evidence or analyzing them for a trade. Skip symbols outside that list.
+Include any blocked holdings and fills in account reconciliation and applicable
+plan totals. If live eligibility is unavailable or execution is disabled, report
+the gap or restriction and continue account reconciliation. Verify the exact
+instrument and its broker eligibility. Check the freshness of market evidence and the availability
 of a current quote before assessing a price or timing. Identify assumptions and
 missing inputs that prevent a decision. Use the live account's verified
 restrictions and the user's stated risk limits.
@@ -49,11 +54,29 @@ closed fills and their attributable fees. Recalculate from cumulative P&L so
 losses still offset later gains after the floor is reached. Exclude unrealized
 P&L and cash transfers.
 
+Identify each order as a trading-plan order or a separate holding at entry.
+Use a plan ledger that covers history beyond Schwab's seven-day window and
+records matched fills, attributable fees, open cost basis, and unfilled buy
+commitments. Leave historical attribution unresolved when the evidence is
+incomplete. Report realized P&L from matched execution prices separately from
+unrealized P&L at the broker mark. Label fill-based P&L as before fees when
+attributable fees are unavailable.
+
 For new buys, subtract the cost basis of open plan positions and the unfilled
 amount of working buy orders from the allowance. Size within the remaining
 allowance, verified broker buying power, and applicable order limits. If the
 realized P&L history or committed capital cannot be reconciled, report the gap
 and defer new buys. Report the allowance separately from available buying power.
+
+Before sizing a new trade, record the thesis, the price or condition that
+invalidates it, and the dollar loss budget within the user's risk limits. Size
+against both available capital and estimated loss per share, including an
+allowance for slippage. If the exit condition has no usable price estimate or
+the risk budget is missing, identify the missing input before proposing a size.
+Specify how the exit condition will be monitored and account for the possibility
+that a DAY limit exit may go unfilled. After closing, record the exit reason,
+compare actual P&L with planned risk, and review fill prices against order
+limits. Use a series of comparable closed trades to assess signal changes.
 
 Before live submission, call `get_live_trading_permission({})` and verify that
 the server enables execution for this agent, the configured account is the
