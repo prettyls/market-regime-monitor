@@ -54,6 +54,16 @@ indices from trade proposals and allocation targets. An ETF that tracks an
 index is eligible on its own merits. Treat SPY as an example and possible
 benchmark, with the same eligibility checks as any other ETF.
 
+Keep the selected paper account's configured initial cash as its baseline.
+The paper trading allowance is the greater of that baseline and the baseline
+plus cumulative net realized P&L from the account's simulated fills, including
+attributable fees. Recalculate from cumulative P&L so losses still offset later
+gains after the floor is reached. Exclude unrealized P&L and standalone proposals.
+Subtract the cost basis of open paper positions when sizing new buys, and apply
+the account's cash, reserve, position and turnover limits. If the account's
+realized P&L through the latest fill cannot be verified, report the gap and
+defer new buys.
+
 Apply the returned rules and server limits. Increase a paper allocation only
 when the target instrument's regime, signed score and heuristic confidence meet
 the configured entry criteria. Honor bearish exits when the holding is eligible

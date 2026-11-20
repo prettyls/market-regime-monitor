@@ -41,6 +41,18 @@ of a current quote before assessing a price or timing. Identify assumptions and
 missing inputs that prevent a decision. Use the live account's verified
 restrictions and the user's stated risk limits.
 
+Use a $500 baseline for live trading. The trading allowance is the greater of
+$500 and $500 plus cumulative net realized P&L for the trading plan. Count
+closed fills and their attributable fees. Recalculate from cumulative P&L so
+losses still offset later gains after the floor is reached. Exclude unrealized
+P&L and cash transfers.
+
+For new buys, subtract the cost basis of open plan positions and the unfilled
+amount of working buy orders from the allowance. Size within the remaining
+allowance, verified broker buying power, and applicable order limits. If the
+realized P&L history or committed capital cannot be reconciled, report the gap
+and defer new buys. Report the allowance separately from available buying power.
+
 Before live submission, call `get_live_trading_permission({})` and verify that
 the server enables execution for this agent, the configured account is the
 intended account, and the order fits the returned limits. Submit only within
