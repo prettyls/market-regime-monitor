@@ -17,8 +17,14 @@ export const priceHistoryQuerySchema = z.object({
 }).refine(({ from, to, interval }) => !from || !to ||
   (interval === "1d" ? from <= to : from < to), "Invalid price history window");
 
+const agentSymbolSchema = z.string().trim().min(1).max(30).transform(symbol => symbol.toUpperCase());
+
+export const tradingContextInputSchema = z.object({
+  symbol: agentSymbolSchema.optional().describe("Source analysis symbol. Returns only its latest saved analysis."),
+}).strict();
+
 export const schwabBarsInputSchema = z.object({
-  symbol: z.string().trim().min(1).max(30).transform(symbol => symbol.toUpperCase()),
+  symbol: agentSymbolSchema,
   interval: z.enum(historyIntervals),
   from: z.iso.datetime({ offset: true }).optional(),
   to: z.iso.datetime({ offset: true }).optional(),

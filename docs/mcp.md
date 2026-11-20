@@ -74,6 +74,13 @@ fingerprint of the returned files and changes when their contents change.
 The agent host needs to discover and call the tool. Trading permissions are
 checked separately by the order endpoints.
 
+For a smaller context response, call `get_trading_context` with
+`{"symbol":"VIX"}`. The filter matches the source analysis symbol
+case-insensitively. The response includes the simulation policy, the eligible
+trading symbols, and at most one entry in `analyses`. If the symbol has no saved
+analysis, `analyses` is empty. Omit `symbol` to get up to 100 recent analyses
+across symbols.
+
 Scheduled regime analysis uses daily candles. For an on-demand Schwab lookup,
 call `get_schwab_bars` with inputs such as `{"symbol":"SPY","interval":"5m"}`.
 Supported intervals are `1d`, `1m`, `5m`, `10m`, `15m`, `30m`, and `1h`. Intraday

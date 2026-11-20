@@ -8,7 +8,7 @@ import { eligibleTradingInstrument, listEligibleTradingSymbols } from "./instrum
 import { liveOrderConfig, notionalUnits, proposalSchema, simulationPolicyConfigSchema, validatePolicy } from "./policy.js";
 import { registerLiveOrderRoutes } from "./live.js";
 import { readTradingSkill } from "./skill-guidance.js";
-import { priceHistoryQuerySchema, tradingSkillInputSchema } from "../schemas.js";
+import { priceHistoryQuerySchema, tradingContextInputSchema, tradingSkillInputSchema } from "../schemas.js";
 import type { MarketService } from "../services.js";
 import { readSchwab } from "./schwab.js";
 
@@ -66,11 +66,19 @@ export function registerTradingRoutes(app: FastifyInstance, db: PrismaClient, li
       });
       return { provider: "charles_schwab", symbol: symbol.toUpperCase(), interval, bars };
     });
-    routes.get("/api/v1/agent/context", async () => ({
-      mode: "SIMULATION", policy: { ...policy, allowedSymbols: await listEligibleTradingSymbols(db, policy.blockedSymbols) },
-      analyses: await db.analysis.findMany({ orderBy: { timestamp: "desc" }, take: 100,
-        include: { instrument: { select: { symbol: true, kind: true } } } }),
-    }));
+    routes.get("/api/v1/agent/context", async request => {
+      const { symbol } = tradingContextInputSchema.parse(request.query);
+      return {
+        mode: "SIMULATION",
+        policy: { ...policy, allowedSymbols: await listEligibleTradingSymbols(db, policy.blockedSymbols) },
+        analyses: await db.analysis.findMany({
+          ...(symbol === undefined ? {} : { where: { instrument: { symbol } } }),
+          orderBy: { timestamp: "desc" },
+          take: symbol === undefined ? 100 : 1,
+          include: { instrument: { select: { symbol: true, kind: true } } },
+        }),
+      };
+    });
     routes.get("/api/v1/agent/portfolio/paper", async () => ({
       mode: "PAPER", policy: paperConfig(), rules: tradingRules, accounts: await db.paperAccount.findMany(),
       runs: await db.paperRun.findMany({ orderBy: { createdAt: "desc" }, take: 20 }),
