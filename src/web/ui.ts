@@ -208,8 +208,8 @@ ${baseStyles}
     );
     var signals = analysis.signals || [];
     $("signals").className = "";
-    $("signals").replaceChildren(signals.length ? table(["Pattern", "State", "Score", "Strength", "Volume vs baseline", "ATR"], signals.map(function (s) {
-      return [term(s.pattern), term(s.state), fmt(s.score), s.pattern === "volume" ? "—" : fmt(s.confidence) + "%", s.metrics && s.metrics.relativeVolume !== undefined ? fmt(s.metrics.relativeVolume) + "× latest / " + fmt(s.metrics.confirmationRatio) + "× confirmation" : "—", s.metrics && s.metrics.atr !== undefined ? fmt(s.metrics.atr) : "—"];
+    $("signals").replaceChildren(signals.length ? table(["Pattern", "State", "Score", "Strength", "Volume vs baseline", "ATR", "MA gap (ATR)", "Slope (ATR/bar)"], signals.map(function (s) {
+      return [term(s.pattern), term(s.state), fmt(s.score), s.pattern === "volume" ? "—" : fmt(s.confidence) + "%", s.metrics && s.metrics.relativeVolume !== undefined ? fmt(s.metrics.relativeVolume) + "× latest / " + fmt(s.metrics.confirmationRatio) + "× confirmation" : "—", s.metrics && s.metrics.atr !== undefined ? fmt(s.metrics.atr) : "—", s.metrics && s.metrics.gapAtr !== undefined ? fmt(s.metrics.gapAtr) : "—", s.metrics && s.metrics.slopeAtr !== undefined ? fmt(s.metrics.slopeAtr) : "—"];
     })) : "No signals.");
     var evidence = analysis.evidence || [];
     $("evidence").className = evidence.length ? "" : "empty";

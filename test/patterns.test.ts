@@ -5,7 +5,7 @@ import { BreakoutDetector, DynamicRangeDetector, MeanReversionDetector, TrendDet
 const bars = (closes: number[]): Bar[] => closes.map((close, i) => ({ timestamp: new Date(2020, 0, i + 1), open: close, high: close, low: close, close }));
 describe("pattern detectors", () => {
   it("finds a confirmed breakout", () => { const config = { ...defaultPatternConfig, breakout: { lookback: 5, confirmationBars: 2, bufferPct: 0 } }; expect(new BreakoutDetector().detect(bars([1, 2, 3, 4, 5, 6, 7]), config).state).toBe("CONFIRMED_UP"); });
-  it("finds a trend", () => { const config = { ...defaultPatternConfig, trend: { fastPeriod: 3, slowPeriod: 5, slopePeriod: 3 } }; expect(new TrendDetector().detect(bars([1, 2, 3, 4, 5, 6]), config).state).toBe("UP"); });
+  it("finds a trend", () => { const config = { ...defaultPatternConfig, trend: { fastPeriod: 3, slowPeriod: 5, slopePeriod: 3, atrPeriod: 3 } }; expect(new TrendDetector().detect(bars([1, 2, 3, 4, 5, 6]), config).state).toBe("UP"); });
   it("finds an extreme eligible for mean reversion", () => { const config = { ...defaultPatternConfig, meanReversion: { lookback: 6, zScoreEntry: 1.5 } }; expect(new MeanReversionDetector().detect(bars([10, 10, 10, 10, 10, 20]), config).state).toBe("REVERT_DOWN"); });
   it("uses a data-driven range", () => { const config = { ...defaultPatternConfig, range: { lookback: 5, percentileLow: 0, percentileHigh: 1 } }; expect(new DynamicRangeDetector().detect(bars([1, 2, 3, 4, 5]), config).metrics).toEqual(expect.objectContaining({ low: 1, high: 5 })); });
 });
@@ -38,4 +38,13 @@ it("uses reference ATR without including the breakout candles", () => {
 });
 it("gives ranges no directional bias below support", () => {
   expect(new DynamicRangeDetector().detect(bars(Array.from({ length: 60 }, (_, i) => 100 - i)), defaultPatternConfig).score).toBe(0);
+});
+
+it.each([1, -1])("filters weak trends in direction %s despite agreement", (direction) => {
+  const input = bars(Array.from({ length: 60 }, (_, i) => 100 + direction * i * 0.01))
+    .map((bar) => ({ ...bar, high: bar.close + 1, low: bar.close - 1 }));
+  const result = new TrendDetector().detect(input, defaultPatternConfig);
+  expect(result.state).toBe("FLAT");
+  expect(result.metrics.gapAtr).toBeCloseTo(direction * 0.05);
+  expect(result.metrics.slopeAtr).toBeCloseTo(direction * 0.005);
 });
