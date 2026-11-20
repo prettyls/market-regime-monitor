@@ -59,6 +59,8 @@ Leave unresolved outcomes available for reconciliation at the next session.
    analyses. Its policy is `TRADING_POLICY_JSON`, whereas the paper portfolio's
    policy is `PAPER_TRADING_JSON`. They are separate. Find the intended symbol
    and date; confidence is a 0–100 heuristic strength measure.
+   To retrieve only the latest saved analysis for a known source symbol, call
+   `get_trading_context` with arguments such as `{"symbol":"VIX"}`.
 3. Explain whether the scheduled decision is consistent with the saved rules.
    Scheduled allocation uses HOLD with no targets, or REBALANCE with exactly one
    weight for each configured symbol, including zeros for exits. Whole-share

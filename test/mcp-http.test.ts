@@ -31,7 +31,14 @@ it("serves stateless discovery and delegates tools through scoped API auth", asy
     expect(init.statusCode).toBe(200);
     expect(init.json().result.serverInfo.name).toBe("market-regime-monitor");
     const tools = await app.inject({ method: "POST", url: "/mcp", headers, payload: { jsonrpc: "2.0", id: 2, method: "tools/list" } });
-    expect(tools.json().result.tools).toHaveLength(10);
+    const discoveredTools = tools.json().result.tools;
+    expect(discoveredTools).toHaveLength(10);
+    const contextTool = discoveredTools.find((tool: { name: string }) => tool.name === "get_trading_context");
+    expect(contextTool?.inputSchema).toMatchObject({
+      type: "object",
+      properties: { symbol: { type: "string", description: expect.stringContaining("latest saved analysis") } },
+    });
+    expect(contextTool?.inputSchema.required ?? []).not.toContain("symbol");
     const call = (name: string, args = {}) => app.inject({ method: "POST", url: "/mcp", headers, payload: { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name, arguments: args } } });
     const paper = (await call("get_trading_skill", { workflow: "paper" })).json().result;
     const paperSkill = JSON.parse(paper.content[0].text);
