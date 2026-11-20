@@ -59,6 +59,16 @@ namespace is substituted. Repeated authorization failures stop the workflow.
 
 ## Portfolio and risk behavior
 
+For paper trade planning with the Codex skill, keep the account's configured
+`initialCash` as the baseline. The allowance is
+`max(initialCash, initialCash + cumulative net realized P&L)` using closed
+simulated fills and attributable fees from that ledger. Losses offset later
+gains even at the floor. Open position cost basis uses part of the allowance.
+New buys also respect available cash, the cash reserve and account limits.
+Unrealized P&L and standalone simulations are excluded from the allowance.
+The scheduled engine sizes target weights from marked portfolio equity under
+the account policy described below.
+
 The agent chooses HOLD or a complete set of target allocation weights.
 Unallocated value remains cash. There is no requirement to trade each day. The
 server validates symbol coverage, total allocation, and per-position targets.

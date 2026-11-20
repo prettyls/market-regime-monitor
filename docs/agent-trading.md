@@ -96,6 +96,15 @@ Schwab positions are never modified. A SIMULATED result is not a broker fill.
 
 ## Enable agent live orders
 
+The live trading plan starts with a $500 baseline. Its allowance is
+`max($500, $500 + cumulative net realized P&L)`. Use closed fills for the
+trading plan, including attributable fees. Losses offset later gains even when
+the allowance is at its floor. Unrealized P&L and cash transfers are excluded.
+Open position cost basis and unfilled buy commitments use part of the allowance.
+New buys must also fit verified Schwab buying power and the API's configured
+limits. Defer new buys when realized P&L or commitments cannot be reconciled.
+The Codex real-trading skill applies this sizing rule during trade preparation.
+
 On the API server, set `SCHWAB_TRADE_ACCOUNT_HASH` to the intended Schwab
 account hash and set `AGENT_LIVE_TRADING_ENABLED=true`. Configure
 `AGENT_LIVE_TRADING_JSON` with `maxOrderDollars` and `maxDailyDollars`. Grant `trades:execute` only to the
