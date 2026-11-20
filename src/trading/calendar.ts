@@ -4,11 +4,14 @@ import { createHash } from "node:crypto";
 import { SchwabPortfolioError } from "./schwab.js";
 
 const querySchema = z.object({ month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/) });
+const transactionTimestamp = z.string()
+  .transform(value => value.replace(/([+-]\d{2})(\d{2})$/, "$1:$2"))
+  .pipe(z.string().datetime({ offset: true }));
 export const transactionSchema = z.array(z.object({
-  activityId: z.number().int().safe(), time: z.string().datetime({ offset: true }),
-  tradeDate: z.string().datetime({ offset: true }).optional(),
+  activityId: z.number().int().safe(), time: transactionTimestamp,
+  tradeDate: transactionTimestamp.optional(),
   type: z.string(), status: z.string(), netAmount: z.number().finite(),
-  activityType: z.string(),
+  activityType: z.string().optional(),
   transferItems: z.array(z.object({
     instrument: z.object({ assetType: z.string(), symbol: z.string().optional(), cusip: z.string().optional() }),
     amount: z.number().finite(), positionEffect: z.string().optional(),
@@ -28,13 +31,16 @@ export function calculateCalendarDays(transactions: Transaction[]) {
     if (seen.has(tx.activityId)) continue;
     seen.add(tx.activityId);
     if (tx.status !== "VALID") continue;
-    const date = calendarSession(tx.tradeDate ?? tx.time);
+    // Schwab can encode the trade's business date as midnight UTC.
+    const date = tx.tradeDate && /T00:00:00(?:\.0+)?(?:Z|\+00:00)$/.test(tx.tradeDate)
+      ? tx.tradeDate.slice(0, 10)
+      : calendarSession(tx.tradeDate ?? tx.time);
     const day = days.get(date) ?? { pnl: new D(0), closingTrades: 0, incomplete: false };
     days.set(date, day);
     const securities = tx.transferItems.filter(i => i.instrument.assetType !== "CURRENCY");
     const item = securities[0];
     const key = item?.instrument.cusip || item?.instrument.symbol;
-    if (tx.type !== "TRADE" || tx.activityType !== "EXECUTION" || securities.length !== 1 || !item || item.instrument.assetType !== "EQUITY" || !key || item.amount === 0) {
+    if (tx.type !== "TRADE" || (tx.activityType !== undefined && tx.activityType !== "EXECUTION") || securities.length !== 1 || !item || item.instrument.assetType !== "EQUITY" || !key || item.amount === 0) {
       day.incomplete = true;
       for (const i of securities) { const k = i.instrument.cusip || i.instrument.symbol; if (k) blocked.add(k); }
       continue;
