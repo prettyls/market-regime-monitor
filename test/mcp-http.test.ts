@@ -9,7 +9,7 @@ afterEach(() => vi.unstubAllEnvs());
 async function setup(role = "admin", scopes = ["analysis:read"]) {
   vi.stubEnv("AGENT_CREDENTIALS_JSON", JSON.stringify([{ id: "test", token, role, scopes }]));
   const app = Fastify(); registerAccess(app);
-  const read = vi.fn(async () => []);
+  const read = vi.fn<() => Promise<unknown[]>>().mockResolvedValue([]);
   vi.stubEnv("TRADING_POLICY_JSON", undefined);
   const list = vi.fn(async () => [{ symbol: "QQQ" }, { symbol: "SPY" }]);
   const downloadHistory = vi.fn(async () => [
@@ -47,7 +47,25 @@ it("serves stateless discovery and delegates tools through scoped API auth", asy
       where: { active: true, kind: { in: ["EQUITY", "ETF"] } },
       orderBy: { symbol: "asc" }, select: { symbol: true },
     });
-    expect(read).toHaveBeenCalledOnce();
+    expect(read).toHaveBeenLastCalledWith({
+      orderBy: { timestamp: "desc" }, take: 100,
+      include: { instrument: { select: { symbol: true, kind: true } } },
+    });
+    const latest = { id: "latest-vix", instrument: { symbol: "VIX", kind: "INDEX" } };
+    read.mockResolvedValueOnce([latest]);
+    const filtered = (await call("get_trading_context", { symbol: " vix " })).json().result;
+    expect(JSON.parse(filtered.content[0].text)).toEqual({
+      ...JSON.parse(context.content[0].text), analyses: [latest],
+    });
+    expect(read).toHaveBeenLastCalledWith({
+      where: { instrument: { symbol: "VIX" } },
+      orderBy: { timestamp: "desc" }, take: 1,
+      include: { instrument: { select: { symbol: true, kind: true } } },
+    });
+    const missing = (await call("get_trading_context", { symbol: "UNKNOWN" })).json().result;
+    expect(JSON.parse(missing.content[0].text).analyses).toEqual([]);
+    expect((await call("get_trading_context", { symbol: " " })).json().result.isError).toBe(true);
+    expect(read).toHaveBeenCalledTimes(3);
     const bars = (await call("get_schwab_bars", { symbol: "SPY", interval: "5m" })).json().result;
     expect(JSON.parse(bars.content[0].text)).toMatchObject({
       provider: "charles_schwab", symbol: "SPY", interval: "5m",

@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { schwabBarsInputSchema, tradingSkillInputSchema } from "../schemas.js";
+import { schwabBarsInputSchema, tradingContextInputSchema, tradingSkillInputSchema } from "../schemas.js";
 import { liveOrderSchema, proposalSchema } from "../trading/policy.js";
 
 export interface AgentApiConfig { apiUrl: string; agentToken: string }
@@ -70,7 +70,14 @@ export function createTradingMcpServer(config: AgentApiConfig, request: typeof f
     inputSchema: tradingSkillInputSchema,
     annotations: readAnnotations,
   }, ({ workflow }) => call(`/api/v1/agent/skills/${workflow}`));
-  server.registerTool("get_trading_context", { description: "Read saved market analyses, simulation policy, and eligible symbols from the active equity and ETF registry. Analysis confidence is heuristic, not a probability.", inputSchema: z.object({}).strict(), annotations: readAnnotations }, () => call("/api/v1/agent/context"));
+  server.registerTool("get_trading_context", {
+    description: "Read saved market analyses, simulation policy, and eligible symbols from the active equity and ETF registry. Pass a source symbol to return at most one analysis, the latest for that symbol. Omit it to return up to 100 recent analyses. Analysis confidence is heuristic, not a probability.",
+    inputSchema: tradingContextInputSchema,
+    annotations: readAnnotations,
+  }, ({ symbol }) => {
+    const query = symbol === undefined ? "" : `?${new URLSearchParams({ symbol })}`;
+    return call(`/api/v1/agent/context${query}`);
+  });
   server.registerTool("get_schwab_bars", {
     description: "Read Schwab OHLCV candles for a registered symbol, including volume change versus the previous returned bar. Intraday bars cover regular trading hours. Hourly bars combine Schwab 30-minute candles aligned to 9:30 a.m. Eastern. Supply optional ISO 8601 timestamps with timezone offsets to bound the query.",
     inputSchema: schwabBarsInputSchema,
